@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import sys, os
 import argparse
-from PIL import Image, ImageEnhance
-import numpy as np
+import os
+import sys
+
 import numba
-from numba import cuda
+import numpy as np
+from PIL import Image, ImageEnhance
 
 
 @numba.jit
-def dither(num, thresh=127):
+def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
     """
     Applies Atkinson's style dithering process to a given intensity image represented as a NumPy array.
 
@@ -53,7 +53,7 @@ def dither(num, thresh=127):
     return num[::-1, :] * 255
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> None:
     """
     Main function to parse command-line arguments and orchestrate the dithering process.
 
@@ -180,7 +180,7 @@ def main(argv=None):
         m = np.array(img)[:, :]
         m2 = dither(m, thresh=args.threshold)
         out = Image.fromarray(m2[::-1, :])
-    basename, ext = os.path.splitext(args.filename)
+    basename, _ext = os.path.splitext(args.filename)
     outfn = basename + "_out." + args.ext
 
     if args.double:
