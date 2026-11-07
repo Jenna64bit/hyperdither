@@ -2,9 +2,7 @@
 
 Simple Atkinson style dithering using Python.
 
-To speed up the processing, this script requires numpy and numba.  I'm sure there are easy ways to do the same using pure C, but I don't know them.
-
-My main dither function is a little ratty looking.  I was surprised though that it was more efficient than some other PIL/PILLOW implementations I found.  Once I sped it up with [numba][], it became significantly faster.
+To speed up the processing, this script requires numpy and numba. This fork has been updated both for modern Python programming standards (IE, Typehinting and Ruff formatting) and has been updated to function under Python 3.14.
 
 ## Example
 
