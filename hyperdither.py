@@ -10,6 +10,23 @@ from numba import cuda
 
 @numba.jit
 def dither(num, thresh=127):
+    """
+    Applies Atkinson's style dithering process to a given intensity image represented as a NumPy array.
+
+    The function simulates an error diffusion filter across multiple passes (using neighbor information) 
+    to spread quantization errors, resulting in a more visually pleasing dithered output when 
+    converting continuous tones to black and white (1-bit).
+
+    Args:
+        num (np.ndarray): The input intensity array of shape (height, width), containing 
+                           pixel values between 0 and 255. This array is modified in place 
+                           to hold the dithered output.
+        thresh (int, optional): The black/white threshold value. Values above this are considered 'black' 
+                                 and below are 'white'. Defaults to 127.
+
+    Returns:
+        np.ndarray: The final dithered array, scaled back to the full 0-255 range and reversed along axis 0 (rows).
+    """
     derr = np.zeros(num.shape, dtype=int)
 
     div = 8
