@@ -39,7 +39,6 @@ def dither(num, thresh=127):
 def main(argv=None):
     if argv is None:
         argv = sys.argv
-    programName = os.path.basename(argv[0])
 
     parser = argparse.ArgumentParser(
         description="Dither image an image using Atkinson 'hyperdither'."
