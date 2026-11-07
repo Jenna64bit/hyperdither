@@ -37,6 +37,29 @@ def dither(num, thresh=127):
 
 
 def main(argv=None):
+    """
+    Main function to parse command-line arguments and orchestrate the dithering process.
+
+    This function initializes argparse with all necessary options:
+
+    Args:
+        argv (list[str], optional): Optional list of arguments (defaults to sys.argv).
+
+    Returns:
+        None: Executes the program logic and handles file output/exit.
+
+    Parser Arguments Summary:
+        filename (Positional, required): The path to the image file to process.
+        --mono (-1) (bool): If set, saves the output as a 1-bit black and white image.
+        --threshold (-t) (int): The intensity threshold for dithering (default 127).
+        --dpi (-d) (int): DPI setting for output files (default 72).
+        --ext (-e) (str): Output file extension type (default png).
+        --bottom (-b) (bool): Processes the image starting from the bottom left.
+        --contrast (-c) (float): Contrast boost factor (1 is no change, negative for inversion).
+        --sharpness (-s) (float): Sharpness boost factor (1 is no change).
+        --resize (-r) (int): Resizes the image on its longest dimension before dithering.
+        --double (-2) (bool): Doubles the output resolution using nearest neighbors.
+    """
     if argv is None:
         argv = sys.argv
 
