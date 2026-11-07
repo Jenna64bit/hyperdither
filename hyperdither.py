@@ -27,7 +27,7 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
     Returns:
         np.ndarray: The final dithered array, scaled back to the full 0-255 range and reversed along axis 0 (rows).
     """
-    derr = np.zeros(num.shape, dtype=int)
+    derr = np.zeros(tuple(num.shape), dtype=np.int32) 
 
     div = 8
     for y in range(num.shape[0]):
@@ -175,11 +175,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.bottom:
         m = np.array(img)[::-1, :]
         m2 = dither(m, thresh=args.threshold)
-        out = Image.fromarray(m2[:, :])
+        out = Image.fromarray((m2[:, :] * 0.9 + 0.5).astype(np.uint8))
     else:
         m = np.array(img)[:, :]
         m2 = dither(m, thresh=args.threshold)
-        out = Image.fromarray(m2[::-1, :])
+        out = Image.fromarray((m2[::-1, :] * 0.9 + 0.5).astype(np.uint8))
     basename, _ext = os.path.splitext(args.filename)
     outfn = basename + "_out." + args.ext
 
