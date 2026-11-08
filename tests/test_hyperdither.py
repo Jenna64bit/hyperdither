@@ -239,6 +239,6 @@ def test_factor_one_equals_no_flag(tmp_path, flag):
 def test_help_states_the_real_default(capsys):
     with pytest.raises(SystemExit):
         h.main(["--help"])
-    text = capsys.readouterr().out
+    text = " ".join(capsys.readouterr().out.split())
     assert h.ENHANCE_DEFAULT == 1.0
     assert text.count("(default 1)") == 2

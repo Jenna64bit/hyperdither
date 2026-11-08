@@ -8,6 +8,7 @@ import numba
 import numpy as np
 from PIL import Image, ImageEnhance
 
+ENHANCE_DEFAULT = 1.0
 VALUE_OPTIONS = {"-c", "--contrast", "-s", "--sharpness"}
 NEGATIVE_NUMBER = re.compile(r"-(\d+\.?\d*|\.\d+)")
 
@@ -139,7 +140,7 @@ def main(argv: list[str] | None = None) -> None:
         "--contrast",
         dest="contrast",
         action="store",
-        default=0,
+        default=ENHANCE_DEFAULT,
         type=float,
         help="boost contrast by specified factor (default 1)",
     )
@@ -148,7 +149,7 @@ def main(argv: list[str] | None = None) -> None:
         "--sharpness",
         dest="sharpness",
         action="store",
-        default=0,
+        default=ENHANCE_DEFAULT,
         type=float,
         help="boost sharpness by specified factor (default 1)",
     )
@@ -178,12 +179,12 @@ def main(argv: list[str] | None = None) -> None:
         print("Must supply a valid file.")
         sys.exit(1)
     img = Image.open(os.path.expanduser(args.filename)).convert("L")
-    if args.contrast:
+    if args.contrast != ENHANCE_DEFAULT:
         # img = ImageEnhance.Contrast(img).enhance(1 + args.contrast/100)
         img = ImageEnhance.Contrast(img).enhance(args.contrast)
     if args.resize:
         img.thumbnail((args.resize,) * 2, 3)
-    if args.sharpness:
+    if args.sharpness != ENHANCE_DEFAULT:
         # img = ImageEnhance.Sharpness(img).enhance(1 + args.sharpness/100)
         img = ImageEnhance.Sharpness(img).enhance(args.sharpness)
 
