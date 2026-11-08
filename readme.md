@@ -26,8 +26,8 @@ Reduced contrast:
 
 ## Options
 
-- `-1`: 1-bit black and white file.  Otherwise the output is encoded as an RGB file.
-- `-t`: the black/white threshold.  Everything above is black.  The maximum is 255.
+- `-1`: 1-bit black and white file.  Otherwise the output is encoded as a grayscale file.
+- `-t`: the black/white threshold.  Pixels at or above it become white.  The maximum is 255.
 - `-d`: dpi out output file.  Only for printing purposes.  Default is 72 dpi.
 - `-e`: output filetype.  Must be accepted by PILLOW or it will throw an exception.  Default is png.
 - `-b`: start at bottom left instead of top left with the dithering.

@@ -26,8 +26,8 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
         num (np.ndarray): The input intensity array of shape (height, width), containing 
                            pixel values between 0 and 255. This array is modified in place 
                            to hold the dithered output.
-        thresh (int, optional): The black/white threshold value. Values above this are considered 'black' 
-                                 and below are 'white'. Defaults to 127.
+        thresh (int, optional): The black/white threshold value. Values at or above this become white
+                                 and values below it become black. Defaults to 127.
 
     Returns:
         np.ndarray: The final dithered array, scaled back to the full 0-255 range and reversed along axis 0 (rows).
@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> None:
         type=int,
         action="store",
         default=127,
-        help="black/white threshold",
+        help="pixels at or above this become white (default 127)",
     )
     parser.add_argument(
         "-d",
