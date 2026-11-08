@@ -666,3 +666,129 @@ def test_escp_trims_blank_right_margin():
 
 def test_escp_resets_the_printer_when_done():
     assert h.escp_stream(np.ones((8, 2), bool), 9).endswith(b"\x1b@")
+
+
+def disc_source(path, size=400, radius=150):
+    yy, xx = np.mgrid[:size, :size]
+    array = np.where((yy - size / 2) ** 2 + (xx - size / 2) ** 2 <= radius**2, 0, 255)
+    Image.fromarray(array.astype(np.uint8)).save(path)
+
+
+@pytest.mark.parametrize(("pins", "size"), [(9, (960, 576)), (24, (1440, 1440))])
+def test_print_sends_the_dithered_dots_one_for_one(tmp_path, pins, size):
+    src = tmp_path / "in.png"
+    capture = tmp_path / "job.prn"
+    write_source(src, size=size)
+    h.main(["--print", str(capture), "--pins", str(pins), str(src)])
+    expected = run_kernel(pixels(src)) == 0
+    decoded, state = decode_escp(capture.read_bytes(), pins, expected.shape)
+    assert np.array_equal(decoded, expected)
+    assert state["unidirectional"]
+
+
+def test_print_defaults_to_nine_pins(tmp_path):
+    src = tmp_path / "in.png"
+    capture = tmp_path / "job.prn"
+    write_source(src, size=(960, 576))
+    h.main(["--print", str(capture), str(src)])
+    assert b"\x1b*\x01" in capture.read_bytes()
+
+
+@pytest.mark.parametrize(("pins", "x_dpi", "y_dpi", "shape"), [(9, 120, 72, (576, 960)), (24, 180, 180, (1440, 1440))])
+def test_a_circle_prints_round(tmp_path, pins, x_dpi, y_dpi, shape):
+    src = tmp_path / "in.png"
+    capture = tmp_path / "job.prn"
+    disc_source(src)
+    h.main(["--print", str(capture), "--pins", str(pins), str(src)])
+    dots, _ = decode_escp(capture.read_bytes(), pins, shape)
+    rows, columns = np.nonzero(dots)
+    width_inches = (columns.max() - columns.min() + 1) / x_dpi
+    height_inches = (rows.max() - rows.min() + 1) / y_dpi
+    assert width_inches == pytest.approx(6.0, rel=0.03)
+    assert height_inches == pytest.approx(width_inches, rel=0.03)
+
+
+def test_page_width_limits_the_printed_columns(tmp_path):
+    src = tmp_path / "in.png"
+    capture = tmp_path / "job.prn"
+    Image.new("L", (100, 100), 0).save(src)
+    h.main(["--print", str(capture), "--page-width", "4", str(src)])
+    dots, _ = decode_escp(capture.read_bytes(), 9, (288, 480))
+    assert dots[:, 479].any()
+
+
+def test_print_to_stdout(source, tmp_path, capsysbinary):
+    capture = tmp_path / "job.prn"
+    h.main(["--print", str(capture), str(source)])
+    h.main(["--print", "-", str(source)])
+    assert capsysbinary.readouterr().out == capture.read_bytes()
+
+
+def test_print_writes_no_image_file(source, tmp_path):
+    h.main(["--print", str(tmp_path / "job.prn"), str(source)])
+    assert not output_of(source).exists()
+
+
+def test_print_honours_gamma(tmp_path):
+    src = tmp_path / "in.png"
+    plain = tmp_path / "plain.prn"
+    light = tmp_path / "light.prn"
+    write_source(src, size=(960, 576))
+    h.main(["--print", str(plain), str(src)])
+    h.main(["--print", str(light), "-g", "2", str(src)])
+    assert plain.read_bytes() != light.read_bytes()
+
+
+def test_print_existing_capture_needs_force(source, tmp_path, dither_calls):
+    capture = tmp_path / "job.prn"
+    capture.write_bytes(b"keep")
+    assert refused(["--print", str(capture), str(source)]) == 2
+    assert capture.read_bytes() == b"keep"
+    assert dither_calls == []
+    h.main(["--print", str(capture), "-f", str(source)])
+    assert capture.read_bytes() != b"keep"
+
+
+@pytest.mark.parametrize("device", ["/dev/hyperdither-no-such", "/no/such/dir/lp0"])
+def test_missing_device_is_refused_before_work(source, dither_calls, device):
+    assert refused(["--print", device, str(source)]) == 2
+    assert dither_calls == []
+
+
+def test_unwritable_device_names_the_lp_group(source, tmp_path, dither_calls, capsys):
+    device = tmp_path / "lp0"
+    device.write_bytes(b"")
+    device.chmod(0o444)
+    assert refused(["--print", str(device), "-f", str(source)]) == 2
+    assert dither_calls == []
+    assert "lp group" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "extra", [["-o", "x.png"], ["-e", "bmp"], ["-2"], ["-r", "100"], ["-d", "100"]]
+)
+def test_file_only_options_conflict_with_print(source, tmp_path, dither_calls, extra):
+    assert refused(["--print", str(tmp_path / "job.prn"), *extra, str(source)]) == 2
+    assert dither_calls == []
+
+
+@pytest.mark.parametrize("extra", [["--pins", "24"], ["--page-width", "4"]])
+def test_print_options_need_print(source, dither_calls, extra):
+    assert refused([*extra, str(source)]) == 2
+    assert dither_calls == []
+
+
+@pytest.mark.parametrize("width", ["0", "nan", "inf"])
+def test_unusable_page_width_is_refused(source, tmp_path, dither_calls, width):
+    assert refused(["--print", str(tmp_path / "j.prn"), "--page-width", width, str(source)]) == 2
+    assert dither_calls == []
+
+
+def test_unknown_pin_count_is_refused(source, tmp_path, dither_calls):
+    assert refused(["--print", str(tmp_path / "j.prn"), "--pins", "12", str(source)]) == 2
+    assert dither_calls == []
+
+
+def test_file_output_keeps_its_default_dpi(source):
+    h.main([str(source)])
+    assert Image.open(output_of(source)).info["dpi"] == pytest.approx((72, 72), abs=0.01)
