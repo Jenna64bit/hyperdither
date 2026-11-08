@@ -16,6 +16,7 @@ ENHANCE_DEFAULT = 1.0
 ESCP_MODES = {9: (1, 8, 120, 72), 24: (39, 24, 180, 180)}
 VALUE_OPTIONS = {"-c", "--contrast", "-s", "--sharpness"}
 NEGATIVE_NUMBER = re.compile(r"-(\d+\.?\d*|\.\d+)")
+DEVICE_DIR = "/dev/"
 
 
 @numba.jit(cache=True)
@@ -281,6 +282,11 @@ def resolve_printing(
     if conflicts:
         parser.error(f"--print cannot be combined with {' '.join(conflicts)}")
     device = "-" if args.print == "-" else os.path.expanduser(args.print)
+    if device.startswith(DEVICE_DIR) and os.path.isfile(device):
+        parser.error(
+            f"{device} is a regular file, not a printer device; "
+            "remove it with sudo rm, then reconnect the printer"
+        )
     if os.path.exists(device):
         if os.path.isfile(device) and not args.force:
             parser.error(f"{device} exists; pass -f to overwrite it")
@@ -289,7 +295,7 @@ def resolve_printing(
                 f"cannot write to {device}; on Linux your user usually needs the lp group"
             )
     elif device != "-" and (
-        device.startswith("/dev/")
+        device.startswith(DEVICE_DIR)
         or not os.access(os.path.dirname(device) or ".", os.W_OK)
     ):
         parser.error(f"no such device: {device}")

@@ -56,6 +56,8 @@ Log in again after the first command.  A parallel port is usually `/dev/lp0`.  T
 
     uv run hyperdither.py photo.jpg --print - | lp -d QUEUE -o raw
 
+If the device is reported as a regular file, something wrote to that path while no printer was attached, and output sent there never reaches paper.  Remove it with `sudo rm`, reconnect the printer, and check that `ls -l` shows a line starting with `c`.
+
 Do not print a dithered PNG through a normal printer driver.  A driver rescales it, and rescaling destroys the dither.
 
 Every printer and ribbon renders grays differently, so print the test wedge once:

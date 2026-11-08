@@ -778,6 +778,25 @@ def test_unwritable_device_names_the_lp_group(source, tmp_path, dither_calls, ca
     assert "lp group" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("flags", [[], ["-f"]])
+def test_regular_file_in_device_dir_is_never_a_printer(
+    source, tmp_path, monkeypatch, dither_calls, capsys, flags
+):
+    monkeypatch.setattr(h, "DEVICE_DIR", f"{tmp_path}/")
+    stale = tmp_path / "lp0"
+    stale.write_bytes(b"keep")
+    assert refused(["--print", str(stale), *flags, str(source)]) == 2
+    assert stale.read_bytes() == b"keep"
+    assert dither_calls == []
+    err = capsys.readouterr().err
+    assert "not a printer device" in err
+    assert "pass -f" not in err
+
+
+def test_character_device_prints_without_force(source):
+    h.main(["--print", os.devnull, str(source)])
+
+
 @pytest.mark.parametrize(
     "extra", [["-o", "x.png"], ["-e", "bmp"], ["-2"], ["-r", "100"], ["-d", "100"]]
 )
