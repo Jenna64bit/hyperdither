@@ -540,3 +540,40 @@ def test_sixteen_bit_gray_keeps_its_range(tmp_path):
     result = pixels(output_of(src))
     assert abs((result > 0).mean() - 0.5) < 0.06
     assert result[:, :64].mean() < result[:, -64:].mean()
+
+
+def gamma_expectation(source, gamma):
+    table = np.array([round(255 * (v / 255) ** (1 / gamma)) for v in range(256)], np.uint8)
+    return run_kernel(table[pixels(source)])
+
+
+@pytest.mark.parametrize("gamma", [0.6, 1.8, 2.2])
+def test_gamma_applies_the_tone_curve(source, gamma):
+    h.main(["-g", str(gamma), str(source)])
+    assert np.array_equal(pixels(output_of(source)), gamma_expectation(source, gamma))
+
+
+def test_gamma_above_one_lightens(tmp_path):
+    plain = tmp_path / "plain.png"
+    light = tmp_path / "light.png"
+    write_source(plain)
+    write_source(light)
+    h.main([str(plain)])
+    h.main(["-g", "2", str(light)])
+    assert (pixels(output_of(light)) > 0).mean() > (pixels(output_of(plain)) > 0).mean()
+
+
+def test_gamma_one_changes_nothing(tmp_path):
+    plain = tmp_path / "plain.png"
+    unit = tmp_path / "unit.png"
+    write_source(plain)
+    write_source(unit)
+    h.main([str(plain)])
+    h.main(["--gamma", "1", str(unit)])
+    assert np.array_equal(pixels(output_of(plain)), pixels(output_of(unit)))
+
+
+@pytest.mark.parametrize("gamma", ["0", "nan", "inf"])
+def test_unusable_gamma_is_refused_before_work(source, dither_calls, gamma):
+    assert refused(["-g", gamma, str(source)]) == 2
+    assert dither_calls == []
