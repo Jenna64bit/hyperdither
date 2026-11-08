@@ -399,3 +399,58 @@ def test_second_process_reuses_the_compiled_kernel(tmp_path):
         for _ in range(2)
     ]
     assert hits == ["0", "1"]
+
+
+def source_text():
+    return (ROOT / "hyperdither.py").read_text(encoding="utf-8")
+
+
+def readme_text():
+    return (ROOT / "readme.md").read_text(encoding="utf-8")
+
+
+def test_stale_migration_plan_is_gone():
+    assert not (ROOT / "PY3_UPDATE.MD").exists()
+
+
+def test_thumbnail_names_its_resample_mode():
+    calls = [
+        node
+        for node in ast.walk(ast.parse(source_text()))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "thumbnail"
+    ]
+    assert calls
+    assert not any(isinstance(arg, ast.Constant) for call in calls for arg in call.args)
+
+
+def test_no_commented_out_assignments():
+    assert not re.search(r"^\s*#\s*\w+\s*=", source_text(), re.MULTILINE)
+
+
+def test_commented_out_scan_fires_on_a_positive_fixture():
+    assert re.search(r"^\s*#\s*\w+\s*=", "    # img = 1\n", re.MULTILINE)
+    assert not re.search(r"^\s*#\s*\w+\s*=", "    # a plain note\n", re.MULTILINE)
+
+
+def test_docstring_describes_one_pass():
+    assert "multiple passes" not in dither_docstring()
+
+
+def test_readme_drops_the_negative_value_workaround():
+    assert '-c"-1"' not in readme_text()
+
+
+def test_readme_lists_every_short_flag():
+    flags = {
+        arg.value
+        for node in ast.walk(ast.parse(source_text()))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_argument"
+        for arg in node.args
+        if isinstance(arg, ast.Constant) and re.fullmatch(r"-\w", arg.value)
+    }
+    assert {"-1", "-o", "-f"} <= flags
+    assert not [flag for flag in sorted(flags) if f"- `{flag}`" not in readme_text()]
