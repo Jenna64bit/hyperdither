@@ -140,3 +140,24 @@ def test_kernel_reference_is_sensitive_to_input():
     changed = array.copy()
     changed[0, 0] ^= 0x80
     assert not np.array_equal(kernel_reference(array), kernel_reference(changed))
+
+
+def test_plain_output_is_exactly_the_dithered_bits(source):
+    h.main([str(source)])
+    expected = run_kernel(pixels(source))
+    actual = pixels(output_of(source))
+    assert np.array_equal(actual, expected)
+    assert set(np.unique(actual)) == {0, 255}
+
+
+def test_mono_output_is_not_dithered_a_second_time(source):
+    h.main(["-1", str(source)])
+    saved = Image.open(output_of(source))
+    assert saved.mode == "1"
+    assert np.array_equal(np.array(saved.convert("L")), run_kernel(pixels(source)))
+
+
+def test_bottom_start_output_is_exactly_the_dithered_bits(source):
+    h.main(["-b", str(source)])
+    expected = h.dither(pixels(source)[::-1, :].copy())
+    assert np.array_equal(pixels(output_of(source)), expected)
