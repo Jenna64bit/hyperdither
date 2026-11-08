@@ -341,3 +341,35 @@ def test_missing_output_directory_is_refused_before_work(source, tmp_path, dithe
 @pytest.mark.parametrize("ext", ["png", "bmp"])
 def test_output_and_ext_conflict(source, tmp_path, ext):
     assert refused(["-e", ext, "-o", str(tmp_path / "chosen.png"), str(source)]) == 2
+
+
+def readme_option(flag):
+    text = (ROOT / "readme.md").read_text(encoding="utf-8")
+    return next(line for line in text.splitlines() if line.startswith(f"- `{flag}`"))
+
+
+def dither_docstring():
+    tree = ast.parse((ROOT / "hyperdither.py").read_text(encoding="utf-8"))
+    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "dither")
+    return " ".join(ast.get_docstring(node).split())
+
+
+@pytest.mark.parametrize(("value", "bit"), [(200, 255), (100, 0)])
+def test_values_above_the_threshold_are_white(value, bit):
+    assert h.dither(np.array([[value]], np.uint8), thresh=127)[0, 0] == bit
+
+
+def test_threshold_docs_say_what_the_code_does(capsys):
+    assert re.search(r"at or above.*white", readme_option("-t"))
+    assert "black" not in readme_option("-t").split("threshold", 1)[1]
+    assert re.search(r"at or above this become white", dither_docstring())
+    with pytest.raises(SystemExit):
+        h.main(["--help"])
+    assert re.search(r"at or above this become white", " ".join(capsys.readouterr().out.split()))
+
+
+def test_readme_names_the_real_plain_output_mode(source):
+    h.main([str(source)])
+    assert Image.open(output_of(source)).mode == "L"
+    assert "grayscale" in readme_option("-1")
+    assert "RGB" not in readme_option("-1")
