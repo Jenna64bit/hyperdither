@@ -1,5 +1,7 @@
 import ast
+import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -373,3 +375,27 @@ def test_readme_names_the_real_plain_output_mode(source):
     assert Image.open(output_of(source)).mode == "L"
     assert "grayscale" in readme_option("-1")
     assert "RGB" not in readme_option("-1")
+
+
+def test_second_process_reuses_the_compiled_kernel(tmp_path):
+    copy = tmp_path / "hyperdither.py"
+    copy.write_text((ROOT / "hyperdither.py").read_text(encoding="utf-8"), encoding="utf-8")
+    probe = (
+        "import numpy as np, hyperdither as h;"
+        "h.dither(np.zeros((2, 3), np.uint8));"
+        "print(sum(h.dither.stats.cache_hits.values()))"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
+    env.pop("NUMBA_CACHE_DIR", None)
+    hits = [
+        subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        for _ in range(2)
+    ]
+    assert hits == ["0", "1"]
