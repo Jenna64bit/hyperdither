@@ -454,3 +454,17 @@ def test_readme_lists_every_short_flag():
     }
     assert {"-1", "-o", "-f"} <= flags
     assert not [flag for flag in sorted(flags) if f"- `{flag}`" not in readme_text()]
+
+
+@pytest.mark.parametrize(
+    ("sample", "args", "command"),
+    [
+        ("cat_out.png", ["-1"], "hyperdither.py -1 cat.jpg"),
+        ("cat_out2.png", ["-1", "-c", ".85"], "hyperdither.py -1 cat.jpg -c .85 -o cat_out2.png"),
+    ],
+)
+def test_committed_samples_match_their_documented_commands(tmp_path, sample, args, command):
+    assert command in readme_text()
+    produced = tmp_path / sample
+    h.main([*args, "-o", str(produced), str(ROOT / "images" / "cat.jpg")])
+    assert np.array_equal(pixels(produced), pixels(ROOT / "images" / sample))
