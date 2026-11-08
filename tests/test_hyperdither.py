@@ -242,3 +242,18 @@ def test_help_states_the_real_default(capsys):
     text = " ".join(capsys.readouterr().out.split())
     assert h.ENHANCE_DEFAULT == 1.0
     assert text.count("(default 1)") == 2
+
+
+def test_literal_tilde_input_is_expanded(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    write_source(tmp_path / "in.png")
+    h.main(["~/in.png"])
+    assert (tmp_path / "in_out.png").is_file()
+
+
+def test_literal_tilde_output_stays_out_of_a_directory_named_tilde(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    write_source(tmp_path / "in.png")
+    h.main(["~/in.png"])
+    assert not (tmp_path / "~").exists()
