@@ -183,3 +183,34 @@ def test_double_with_mono_stays_nearest_neighbor(tmp_path):
     h.main(["-1", "-2", str(doubled)])
     once = pixels(output_of(single))
     assert np.array_equal(pixels(output_of(doubled)), once.repeat(2, axis=0).repeat(2, axis=1))
+
+
+def enhanced_expectation(source, enhancer, factor):
+    return run_kernel(np.array(enhancer(Image.open(source).convert("L")).enhance(factor)))
+
+
+@pytest.mark.parametrize(
+    ("args", "enhancer", "factor"),
+    [
+        (["-c", "-1"], ImageEnhance.Contrast, -1.0),
+        (["--contrast", "-1"], ImageEnhance.Contrast, -1.0),
+        (["-c", "-0.5"], ImageEnhance.Contrast, -0.5),
+        (["-c", "-.5"], ImageEnhance.Contrast, -0.5),
+        (["-s", "-2"], ImageEnhance.Sharpness, -2.0),
+        (["--sharpness", "-2"], ImageEnhance.Sharpness, -2.0),
+        (["-c-1"], ImageEnhance.Contrast, -1.0),
+    ],
+)
+def test_negative_enhancement_values_parse(source, args, enhancer, factor):
+    h.main([*args, str(source)])
+    assert np.array_equal(pixels(output_of(source)), enhanced_expectation(source, enhancer, factor))
+
+
+def test_mono_flag_still_works_after_a_contrast_value(source):
+    h.main(["-c", "1.2", "-1", str(source)])
+    assert Image.open(output_of(source)).mode == "1"
+
+
+def test_mono_flag_alone_is_not_taken_for_a_value(source):
+    h.main(["-1", str(source)])
+    assert Image.open(output_of(source)).mode == "1"
