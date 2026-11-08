@@ -1,3 +1,4 @@
+import argparse
 import ast
 import os
 import re
@@ -105,7 +106,7 @@ def kernel_reference(array, threshold=127):
 
 
 def run_kernel(array):
-    return h.dither(array.copy())[::-1, :]
+    return h.dither(array.copy())
 
 
 def test_left_edge_error_does_not_reach_the_right_edge():
@@ -162,7 +163,7 @@ def test_mono_output_is_not_dithered_a_second_time(source):
 
 def test_bottom_start_output_is_exactly_the_dithered_bits(source):
     h.main(["-b", str(source)])
-    expected = h.dither(pixels(source)[::-1, :].copy())
+    expected = kernel_reference(pixels(source)[::-1, :])[::-1, :]
     assert np.array_equal(pixels(output_of(source)), expected)
 
 
@@ -859,3 +860,374 @@ def test_every_recipe_option_exists(capsys):
     text = capsys.readouterr().out
     for option in ("--print", "--pins", "--page-width", "--gamma"):
         assert option in text
+
+
+def test_missing_input_is_reported(tmp_path, dither_calls, capsys):
+    assert refused([str(tmp_path / "absent.png")]) == 1
+    assert "valid file" in capsys.readouterr().err
+    assert dither_calls == []
+
+
+def test_a_file_that_is_not_an_image_is_refused(tmp_path, dither_calls, capsys):
+    src = tmp_path / "notes.png"
+    src.write_text("not an image", encoding="utf-8")
+    assert refused([str(src)]) == 2
+    assert "cannot read" in capsys.readouterr().err
+    assert dither_calls == []
+
+
+def test_a_truncated_image_is_refused(tmp_path, dither_calls, capsys):
+    src = tmp_path / "cut.png"
+    write_source(src, size=(200, 200))
+    src.write_bytes(src.read_bytes()[:400])
+    assert refused([str(src)]) == 2
+    assert "cannot read" in capsys.readouterr().err
+    assert dither_calls == []
+
+
+@pytest.mark.parametrize(
+    ("size", "limit", "expected"),
+    [((64, 48), 32, (32, 24)), ((48, 64), 32, (24, 32)), ((64, 48), 1000, (64, 48))],
+)
+def test_resize_limits_the_longest_side_and_never_enlarges(
+    tmp_path, size, limit, expected
+):
+    src = tmp_path / "in.png"
+    write_source(src, size=size)
+    h.main(["-r", str(limit), str(src)])
+    assert Image.open(output_of(src)).size == expected
+
+
+def test_resize_dithers_the_shrunken_image(source):
+    h.main(["-r", "32", str(source)])
+    small = Image.open(source).convert("L")
+    small.thumbnail((32, 32), Image.Resampling.BICUBIC)
+    assert np.array_equal(pixels(output_of(source)), run_kernel(np.array(small)))
+
+
+@pytest.mark.parametrize("dpi", [100, 300])
+def test_dpi_reaches_the_file(source, dpi):
+    h.main(["-d", str(dpi), str(source)])
+    assert Image.open(output_of(source)).info["dpi"] == pytest.approx(
+        (dpi, dpi), abs=0.01
+    )
+
+
+def module_tree():
+    return ast.parse(source_text())
+
+
+def function_named(name):
+    return next(
+        node
+        for node in module_tree().body
+        if isinstance(node, ast.FunctionDef) and node.name == name
+    )
+
+
+def test_dither_returns_8_bit_values_in_place_and_upright():
+    array = np.zeros((4, 4), np.uint8)
+    array[0] = 255
+    result = h.dither(array)
+    assert result.dtype == np.uint8
+    assert np.shares_memory(result, array)
+    assert result[0].tolist() == [255] * 4
+    assert result[3].tolist() == [0] * 4
+
+
+def test_kernel_has_only_the_threshold_branch():
+    branches = [n for n in ast.walk(function_named("dither")) if isinstance(n, ast.If)]
+    assert len(branches) == 1
+
+
+def test_one_call_site_dithers_both_directions():
+    calls = [
+        node
+        for node in ast.walk(module_tree())
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "dither"
+    ]
+    assert len(calls) == 1
+
+
+def kernel_without_numba(tree):
+    function = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "dither"
+    )
+    function.decorator_list = []
+    namespace = {"np": np}
+    exec(compile(ast.Module([function], []), "kernel", "exec"), namespace)  # noqa: S102
+    return namespace["dither"]
+
+
+def mutants_of_kernel():
+    swaps = {ast.Add: ast.Sub, ast.Sub: ast.Add, ast.Mult: ast.Div, ast.Div: ast.Mult}
+    tree = module_tree()
+    function = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "dither"
+    )
+    lines = source_text().splitlines()
+    plan = []
+    for node in (
+        n
+        for root in [*function.args.defaults, *function.body[1:]]
+        for n in ast.walk(root)
+    ):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            plan.extend((node, "value", node.value, node.value + d) for d in (1, -1))
+        elif isinstance(node, ast.BinOp) and type(node.op) in swaps:
+            plan.append((node, "op", node.op, swaps[type(node.op)]()))
+        elif isinstance(node, ast.AugAssign) and isinstance(node.op, ast.Add):
+            plan.append((node, "op", node.op, ast.Sub()))
+        elif isinstance(node, ast.Compare):
+            plan.append((node, "ops", node.ops, [ast.Gt()]))
+    for node, field, original, replacement in plan:
+        setattr(node, field, replacement)
+        shown = replacement if field == "value" else type(replacement).__name__
+        label = f"{lines[node.lineno - 1].strip()} -> {shown}"
+        yield label, ast.parse(ast.unparse(tree))
+        setattr(node, field, original)
+
+
+def kernel_inputs():
+    rng = np.random.default_rng(3)
+    yield rng.integers(0, 256, (24, 31), dtype=np.uint8)
+    yield np.full((9, 9), 127, np.uint8)
+    yield np.full((9, 9), 126, np.uint8)
+    yield np.linspace(0, 255, 121).astype(np.uint8).reshape(11, 11)
+
+
+# Each changes only which spare buffer cells absorb error leaving the image.
+EQUIVALENT_KERNEL_MUTANTS = {
+    "i = 1 -> 2",
+    "i = 1 -> 0",
+    "carried = np.zeros((height + 2) * stride) -> 3",
+}
+
+
+def test_unmutated_kernel_matches_the_reference():
+    kernel = kernel_without_numba(module_tree())
+    for array in kernel_inputs():
+        assert np.array_equal(kernel(array.copy()), kernel_reference(array))
+
+
+def test_the_kernel_comparison_detects_every_mutant():
+    survivors = []
+    total = 0
+    for label, tree in mutants_of_kernel():
+        total += 1
+        kernel = kernel_without_numba(tree)
+        for array in kernel_inputs():
+            try:
+                if not np.array_equal(kernel(array.copy()), kernel_reference(array)):
+                    break
+            except (
+                IndexError,
+                OverflowError,
+                TypeError,
+                ValueError,
+                ZeroDivisionError,
+            ):
+                break
+        else:
+            survivors.append(label)
+    assert total > 30
+    assert set(survivors) == EQUIVALENT_KERNEL_MUTANTS
+
+
+def test_main_stays_small():
+    main = function_named("main")
+    statements = sum(isinstance(node, ast.stmt) for node in ast.walk(main))
+    branches = sum(
+        isinstance(node, (ast.If, ast.For, ast.While, ast.Try))
+        for node in ast.walk(main)
+    )
+    assert statements <= 16
+    assert branches <= 2
+
+
+def test_build_parser_returns_a_parser():
+    assert isinstance(h.build_parser(), argparse.ArgumentParser)
+
+
+def test_file_and_print_output_share_one_interface(source, tmp_path):
+    parser = h.build_parser()
+    targets = [
+        h.resolve_target(parser.parse_args([str(source)]), str(source), parser),
+        h.resolve_target(
+            parser.parse_args(["--print", str(tmp_path / "j.prn"), str(source)]),
+            str(source),
+            parser,
+        ),
+    ]
+    assert isinstance(targets[0], h.FileTarget)
+    assert isinstance(targets[1], h.PrintTarget)
+    for target in targets:
+        assert callable(target.fit)
+        assert callable(target.send)
+
+
+def test_main_docstring_does_not_restate_the_flags():
+    assert "--" not in ast.get_docstring(function_named("main"))
+
+
+def test_parser_declares_no_redundant_settings():
+    calls = [
+        node
+        for node in ast.walk(module_tree())
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_argument"
+    ]
+    assert calls
+    for call in calls:
+        settings = {k.arg: getattr(k.value, "value", ...) for k in call.keywords}
+        assert "dest" not in settings
+        assert settings.get("action") != "store"
+        assert settings.get("default", ...) not in (None, False)
+
+
+needs_real_permissions = pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="file modes do not restrict this user",
+)
+
+
+def test_input_errors_stay_out_of_the_print_stream(tmp_path, capfd):
+    assert refused(["--print", "-", str(tmp_path / "absent.png")]) == 1
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert "valid file" in captured.err
+
+
+@pytest.mark.parametrize(
+    ("array", "name"),
+    [
+        (np.full((8, 8), 2**30, np.int32), "wide.tif"),
+        (np.full((8, 8), 0.5, np.float32), "float.tif"),
+    ],
+)
+def test_pixel_modes_without_a_known_range_are_refused(
+    tmp_path, dither_calls, capsys, array, name
+):
+    src = tmp_path / name
+    Image.fromarray(array).save(src)
+    assert refused([str(src)]) == 2
+    assert "cannot read" in capsys.readouterr().err
+    assert dither_calls == []
+
+
+def test_an_oversized_image_is_refused(source, dither_calls, monkeypatch, capsys):
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 10)
+    assert refused([str(source)]) == 2
+    assert "cannot read" in capsys.readouterr().err
+    assert dither_calls == []
+
+
+@pytest.mark.parametrize("flag", ["-r", "-d"])
+def test_zero_size_options_are_refused(source, dither_calls, flag):
+    assert refused([flag, "0", str(source)]) == 2
+    assert dither_calls == []
+
+
+@needs_real_permissions
+def test_read_only_output_directory_is_refused_before_work(
+    source, tmp_path, dither_calls
+):
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o555)
+    try:
+        assert refused(["-o", str(locked / "out.png"), str(source)]) == 2
+        assert dither_calls == []
+    finally:
+        locked.chmod(0o755)
+
+
+@needs_real_permissions
+def test_read_only_existing_output_is_refused_before_work(
+    source, tmp_path, dither_calls
+):
+    target = tmp_path / "out.png"
+    target.write_bytes(b"keep")
+    target.chmod(0o444)
+    assert refused(["-f", "-o", str(target), str(source)]) == 2
+    assert target.read_bytes() == b"keep"
+    assert dither_calls == []
+
+
+def test_options_that_accept_negatives_are_joined():
+    floats = {
+        option
+        for action in h.build_parser()._actions
+        if action.type is float
+        for option in action.option_strings
+    }
+    assert floats == h.VALUE_OPTIONS
+
+
+def test_every_option_reaches_the_code():
+    for action in h.build_parser()._actions:
+        if action.dest != "help":
+            assert re.search(rf"\bargs\.{action.dest}\b", source_text()), action.dest
+
+
+def test_help_states_the_defaults_that_run(source, tmp_path):
+    parser = h.build_parser()
+    text = " ".join(parser.format_help().split())
+    printing = h.resolve_target(
+        parser.parse_args(["--print", str(tmp_path / "j.prn"), str(source)]),
+        str(source),
+        parser,
+    )
+    file = h.resolve_target(parser.parse_args([str(source)]), str(source), parser)
+    assert f"print head pins, with --print (default {printing.pins})" in text
+    assert (
+        f"printed width in inches, with --print (default {printing.inches:g})" in text
+    )
+    assert f"dpi of output file (default {file.dpi})" in text
+
+
+def test_parser_and_kernel_share_one_default_threshold():
+    kernel_default = function_named("dither").args.defaults[0].value
+    assert h.build_parser().get_default("threshold") == kernel_default
+
+
+@pytest.mark.parametrize("pins", sorted(h.ESCP_MODES))
+def test_readme_states_each_print_resolution(pins):
+    _, _, x_dpi, y_dpi = h.ESCP_MODES[pins]
+    assert f"{x_dpi}x{y_dpi} dpi" in readme_text()
+
+
+@pytest.mark.parametrize(
+    "args", [["-e", "qoi"], ["-e", "xbm"], ["-1", "-e", "eps"], ["-1", "-e", "sgi"]]
+)
+def test_a_format_that_cannot_hold_the_output_is_refused_before_work(
+    source, dither_calls, args
+):
+    assert refused([*args, str(source)]) == 2
+    assert dither_calls == []
+
+
+def test_a_format_is_judged_for_the_mode_being_written(source):
+    h.main(["-1", "-e", "xbm", str(source)])
+    assert Image.open(source.with_name("in_out.xbm")).format == "XBM"
+
+
+@needs_real_permissions
+def test_read_only_capture_directory_is_refused_before_work(
+    source, tmp_path, dither_calls
+):
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o555)
+    try:
+        assert refused(["--print", str(locked / "job.prn"), str(source)]) == 2
+        assert dither_calls == []
+    finally:
+        locked.chmod(0o755)
