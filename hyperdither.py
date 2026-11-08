@@ -6,7 +6,7 @@ import sys
 
 import numba
 import numpy as np
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 
 ENHANCE_DEFAULT = 1.0
 VALUE_OPTIONS = {"-c", "--contrast", "-s", "--sharpness"}
@@ -87,6 +87,17 @@ def resolve_output(
     if os.path.exists(outfn) and not args.force:
         parser.error(f"{outfn} exists; pass -f to overwrite it")
     return outfn
+
+
+def load_gray(filename: str) -> Image.Image:
+    """Open an image upright, with transparency on white paper and 16-bit data scaled to 8."""
+    img = ImageOps.exif_transpose(Image.open(filename))
+    if img.mode.startswith("I"):
+        return Image.fromarray(np.uint8(np.clip(np.asarray(img) / 257, 0, 255)))
+    if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
+        rgba = img.convert("RGBA")
+        img = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba)
+    return img.convert("L")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -223,7 +234,7 @@ def main(argv: list[str] | None = None) -> None:
         print("Must supply a valid file.")
         sys.exit(1)
     outfn = resolve_output(args, filename, parser)
-    img = Image.open(filename).convert("L")
+    img = load_gray(filename)
     if args.contrast != ENHANCE_DEFAULT:
         img = ImageEnhance.Contrast(img).enhance(args.contrast)
     if args.resize:

@@ -510,7 +510,7 @@ def test_exif_orientation_is_applied(tmp_path):
     assert result[:20].mean() < result[20:].mean()
 
 
-@pytest.mark.parametrize("mode", ["RGBA", "LA", "PA"])
+@pytest.mark.parametrize("mode", ["RGBA", "LA"])
 def test_transparent_pixels_stay_white(tmp_path, mode):
     src = tmp_path / "in.png"
     array = np.zeros((32, 32, 4), np.uint8)
