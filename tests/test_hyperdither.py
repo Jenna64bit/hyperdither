@@ -161,3 +161,25 @@ def test_bottom_start_output_is_exactly_the_dithered_bits(source):
     h.main(["-b", str(source)])
     expected = h.dither(pixels(source)[::-1, :].copy())
     assert np.array_equal(pixels(output_of(source)), expected)
+
+
+def test_double_is_nearest_neighbor(tmp_path):
+    single = tmp_path / "single.png"
+    doubled = tmp_path / "doubled.png"
+    write_source(single)
+    write_source(doubled)
+    h.main([str(single)])
+    h.main(["-2", str(doubled)])
+    once = pixels(output_of(single))
+    assert np.array_equal(pixels(output_of(doubled)), once.repeat(2, axis=0).repeat(2, axis=1))
+
+
+def test_double_with_mono_stays_nearest_neighbor(tmp_path):
+    single = tmp_path / "single.png"
+    doubled = tmp_path / "doubled.png"
+    write_source(single)
+    write_source(doubled)
+    h.main(["-1", str(single)])
+    h.main(["-1", "-2", str(doubled)])
+    once = pixels(output_of(single))
+    assert np.array_equal(pixels(output_of(doubled)), once.repeat(2, axis=0).repeat(2, axis=1))
