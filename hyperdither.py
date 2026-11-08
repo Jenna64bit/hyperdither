@@ -19,12 +19,12 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
     Applies Atkinson's style dithering process to a given intensity image represented as a NumPy array.
 
     The function runs an error diffusion filter in a single pass (using neighbor information)
-    to spread quantization errors, resulting in a more visually pleasing dithered output when 
+    to spread quantization errors, resulting in a more visually pleasing dithered output when
     converting continuous tones to black and white (1-bit).
 
     Args:
-        num (np.ndarray): The input intensity array of shape (height, width), containing 
-                           pixel values between 0 and 255. This array is modified in place 
+        num (np.ndarray): The input intensity array of shape (height, width), containing
+                           pixel values between 0 and 255. This array is modified in place
                            to hold the dithered output.
         thresh (int, optional): The black/white threshold value. Values at or above this become white
                                  and values below it become black. Defaults to 127.
@@ -70,7 +70,9 @@ def attach_negative_values(argv: list[str]) -> list[str]:
     return joined
 
 
-def resolve_output(args: argparse.Namespace, filename: str, parser: argparse.ArgumentParser) -> str:
+def resolve_output(
+    args: argparse.Namespace, filename: str, parser: argparse.ArgumentParser
+) -> str:
     """Choose the output path and refuse an unusable one before any image work."""
     if args.output:
         outfn = os.path.expanduser(args.output)

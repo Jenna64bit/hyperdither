@@ -6,6 +6,12 @@ import sys
 import tomllib
 from pathlib import Path
 
+import numpy as np
+import pytest
+from PIL import Image, ImageEnhance
+
+import hyperdither as h
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -26,15 +32,10 @@ def test_manifest_declares_every_third_party_import():
         re.match(r"[A-Za-z0-9_.-]+", dep).group().lower()
         for dep in manifest["project"]["dependencies"]
     }
-    wanted = {{"PIL": "pillow"}.get(name, name).lower() for name in third_party_imports()}
+    wanted = {
+        {"PIL": "pillow"}.get(name, name).lower() for name in third_party_imports()
+    }
     assert wanted and wanted <= declared
-
-
-import numpy as np
-import pytest
-from PIL import Image, ImageEnhance
-
-import hyperdither as h
 
 
 def write_source(path, size=(64, 48), seed=7):
@@ -173,7 +174,9 @@ def test_double_is_nearest_neighbor(tmp_path):
     h.main([str(single)])
     h.main(["-2", str(doubled)])
     once = pixels(output_of(single))
-    assert np.array_equal(pixels(output_of(doubled)), once.repeat(2, axis=0).repeat(2, axis=1))
+    assert np.array_equal(
+        pixels(output_of(doubled)), once.repeat(2, axis=0).repeat(2, axis=1)
+    )
 
 
 def test_double_with_mono_stays_nearest_neighbor(tmp_path):
@@ -184,11 +187,15 @@ def test_double_with_mono_stays_nearest_neighbor(tmp_path):
     h.main(["-1", str(single)])
     h.main(["-1", "-2", str(doubled)])
     once = pixels(output_of(single))
-    assert np.array_equal(pixels(output_of(doubled)), once.repeat(2, axis=0).repeat(2, axis=1))
+    assert np.array_equal(
+        pixels(output_of(doubled)), once.repeat(2, axis=0).repeat(2, axis=1)
+    )
 
 
 def enhanced_expectation(source, enhancer, factor):
-    return run_kernel(np.array(enhancer(Image.open(source).convert("L")).enhance(factor)))
+    return run_kernel(
+        np.array(enhancer(Image.open(source).convert("L")).enhance(factor))
+    )
 
 
 @pytest.mark.parametrize(
@@ -205,7 +212,9 @@ def enhanced_expectation(source, enhancer, factor):
 )
 def test_negative_enhancement_values_parse(source, args, enhancer, factor):
     h.main([*args, str(source)])
-    assert np.array_equal(pixels(output_of(source)), enhanced_expectation(source, enhancer, factor))
+    assert np.array_equal(
+        pixels(output_of(source)), enhanced_expectation(source, enhancer, factor)
+    )
 
 
 def test_mono_flag_still_works_after_a_contrast_value(source):
@@ -224,7 +233,9 @@ def test_mono_flag_alone_is_not_taken_for_a_value(source):
 )
 def test_zero_enhancement_is_applied(source, flag, enhancer):
     h.main([flag, "0", str(source)])
-    assert np.array_equal(pixels(output_of(source)), enhanced_expectation(source, enhancer, 0.0))
+    assert np.array_equal(
+        pixels(output_of(source)), enhanced_expectation(source, enhancer, 0.0)
+    )
 
 
 @pytest.mark.parametrize("flag", ["-c", "-s"])
@@ -253,7 +264,9 @@ def test_literal_tilde_input_is_expanded(tmp_path, monkeypatch):
     assert (tmp_path / "in_out.png").is_file()
 
 
-def test_literal_tilde_output_stays_out_of_a_directory_named_tilde(tmp_path, monkeypatch):
+def test_literal_tilde_output_stays_out_of_a_directory_named_tilde(
+    tmp_path, monkeypatch
+):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     write_source(tmp_path / "in.png")
@@ -335,7 +348,9 @@ def test_unwritable_output_path_is_refused_before_work(source, tmp_path, dither_
     assert dither_calls == []
 
 
-def test_missing_output_directory_is_refused_before_work(source, tmp_path, dither_calls):
+def test_missing_output_directory_is_refused_before_work(
+    source, tmp_path, dither_calls
+):
     assert refused(["-o", str(tmp_path / "no" / "chosen.png"), str(source)]) == 2
     assert dither_calls == []
 
@@ -352,7 +367,9 @@ def readme_option(flag):
 
 def dither_docstring():
     tree = ast.parse((ROOT / "hyperdither.py").read_text(encoding="utf-8"))
-    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "dither")
+    node = next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "dither"
+    )
     return " ".join(ast.get_docstring(node).split())
 
 
@@ -367,7 +384,9 @@ def test_threshold_docs_say_what_the_code_does(capsys):
     assert re.search(r"at or above this become white", dither_docstring())
     with pytest.raises(SystemExit):
         h.main(["--help"])
-    assert re.search(r"at or above this become white", " ".join(capsys.readouterr().out.split()))
+    assert re.search(
+        r"at or above this become white", " ".join(capsys.readouterr().out.split())
+    )
 
 
 def test_readme_names_the_real_plain_output_mode(source):
@@ -379,7 +398,9 @@ def test_readme_names_the_real_plain_output_mode(source):
 
 def test_second_process_reuses_the_compiled_kernel(tmp_path):
     copy = tmp_path / "hyperdither.py"
-    copy.write_text((ROOT / "hyperdither.py").read_text(encoding="utf-8"), encoding="utf-8")
+    copy.write_text(
+        (ROOT / "hyperdither.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
     probe = (
         "import numpy as np, hyperdither as h;"
         "h.dither(np.zeros((2, 3), np.uint8));"
@@ -460,10 +481,16 @@ def test_readme_lists_every_short_flag():
     ("sample", "args", "command"),
     [
         ("cat_out.png", ["-1"], "hyperdither.py -1 cat.jpg"),
-        ("cat_out2.png", ["-1", "-c", ".85"], "hyperdither.py -1 cat.jpg -c .85 -o cat_out2.png"),
+        (
+            "cat_out2.png",
+            ["-1", "-c", ".85"],
+            "hyperdither.py -1 cat.jpg -c .85 -o cat_out2.png",
+        ),
     ],
 )
-def test_committed_samples_match_their_documented_commands(tmp_path, sample, args, command):
+def test_committed_samples_match_their_documented_commands(
+    tmp_path, sample, args, command
+):
     assert command in readme_text()
     produced = tmp_path / sample
     h.main([*args, "-o", str(produced), str(ROOT / "images" / "cat.jpg")])
