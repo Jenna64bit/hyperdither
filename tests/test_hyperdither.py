@@ -14,6 +14,10 @@ from PIL import Image, ImageEnhance
 import hyperdither as h
 
 ROOT = Path(__file__).resolve().parent.parent
+needs_real_permissions = pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="file modes do not restrict this user",
+)
 
 
 def third_party_imports():
@@ -495,7 +499,52 @@ def test_committed_samples_match_their_documented_commands(
     assert command in readme_text()
     produced = tmp_path / sample
     h.main([*args, "-o", str(produced), str(ROOT / "images" / "cat.jpg")])
-    assert np.array_equal(pixels(produced), pixels(ROOT / "images" / sample))
+    committed = pixels(ROOT / "images" / sample)
+    assert set(np.unique(committed)) == {0, 255}
+    assert looks_alike(pixels(produced), committed)
+
+
+def looks_alike(first, second):
+    """Compare 16-pixel block averages, because error diffusion scatters a one-level input change."""
+
+    def blocks(image):
+        rows, columns = image.shape[0] // 16, image.shape[1] // 16
+        return (
+            image[: rows * 16, : columns * 16]
+            .reshape(rows, 16, columns, 16)
+            .mean((1, 3))
+        )
+
+    return (
+        first.shape == second.shape
+        and np.abs(blocks(first) - blocks(second)).mean() < 2
+    )
+
+
+def test_sample_check_tolerates_another_cpus_rounding(tmp_path, monkeypatch):
+    # Baseline x86-64 rounds these contrast levels one higher than arm64 (#5).
+    class OtherCpuContrast(ImageEnhance.Contrast):
+        def enhance(self, factor):
+            return super().enhance(factor).point(lambda v: v + (v in (25, 42, 59)))
+
+    monkeypatch.setattr(h.ImageEnhance, "Contrast", OtherCpuContrast)
+    produced = tmp_path / "other.png"
+    h.main(["-1", "-c", ".85", "-o", str(produced), str(ROOT / "images" / "cat.jpg")])
+    assert looks_alike(pixels(produced), pixels(ROOT / "images" / "cat_out2.png"))
+
+
+def test_sample_check_rejects_a_different_size():
+    assert not looks_alike(np.zeros((32, 33)), np.zeros((32, 32)))
+
+
+def test_sample_check_rejects_a_different_contrast(tmp_path):
+    images = ROOT / "images"
+    produced = tmp_path / "other.png"
+    h.main(["-1", "-c", ".8", "-o", str(produced), str(images / "cat.jpg")])
+    assert not looks_alike(pixels(produced), pixels(images / "cat_out2.png"))
+    assert not looks_alike(
+        pixels(images / "cat_out.png"), pixels(images / "cat_out2.png")
+    )
 
 
 def test_exif_orientation_is_applied(tmp_path):
@@ -769,6 +818,7 @@ def test_missing_device_is_refused_before_work(source, dither_calls, device):
     assert dither_calls == []
 
 
+@needs_real_permissions
 def test_unwritable_device_names_the_lp_group(source, tmp_path, dither_calls, capsys):
     device = tmp_path / "lp0"
     device.write_bytes(b"")
@@ -1109,12 +1159,6 @@ def test_parser_declares_no_redundant_settings():
         assert "dest" not in settings
         assert settings.get("action") != "store"
         assert settings.get("default", ...) not in (None, False)
-
-
-needs_real_permissions = pytest.mark.skipif(
-    not hasattr(os, "geteuid") or os.geteuid() == 0,
-    reason="file modes do not restrict this user",
-)
 
 
 def test_input_errors_stay_out_of_the_print_stream(tmp_path, capfd):
