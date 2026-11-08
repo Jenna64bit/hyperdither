@@ -13,7 +13,7 @@ VALUE_OPTIONS = {"-c", "--contrast", "-s", "--sharpness"}
 NEGATIVE_NUMBER = re.compile(r"-(\d+\.?\d*|\.\d+)")
 
 
-@numba.jit
+@numba.jit(cache=True)
 def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
     """
     Applies Atkinson's style dithering process to a given intensity image represented as a NumPy array.
