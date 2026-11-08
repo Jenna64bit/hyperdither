@@ -543,7 +543,9 @@ def test_sixteen_bit_gray_keeps_its_range(tmp_path):
 
 
 def gamma_expectation(source, gamma):
-    table = np.array([round(255 * (v / 255) ** (1 / gamma)) for v in range(256)], np.uint8)
+    table = np.array(
+        [round(255 * (v / 255) ** (1 / gamma)) for v in range(256)], np.uint8
+    )
     return run_kernel(table[pixels(source)])
 
 
@@ -611,7 +613,9 @@ def decode_escp(stream, pins, shape):
             body = stream[i + 5 : i + 5 + columns * bytes_per_column]
             assert len(body) == columns * bytes_per_column
             for column in range(columns):
-                word = int.from_bytes(body[column * bytes_per_column : (column + 1) * bytes_per_column])
+                word = int.from_bytes(
+                    body[column * bytes_per_column : (column + 1) * bytes_per_column]
+                )
                 for pin in range(pass_height):
                     if word >> (pass_height - 1 - pin) & 1:
                         dots[y + pin, column] = True
@@ -683,7 +687,9 @@ def test_print_sends_the_dithered_page_one_for_one(tmp_path, pins, size, fitted)
     capture = tmp_path / "job.prn"
     write_source(src, size=size)
     h.main(["--print", str(capture), "--pins", str(pins), str(src)])
-    page = np.array(Image.open(src).convert("L").resize(fitted, Image.Resampling.LANCZOS))
+    page = np.array(
+        Image.open(src).convert("L").resize(fitted, Image.Resampling.LANCZOS)
+    )
     expected = run_kernel(page) == 0
     decoded, state = decode_escp(capture.read_bytes(), pins, expected.shape)
     assert np.array_equal(decoded, expected)
@@ -698,7 +704,10 @@ def test_print_defaults_to_nine_pins(tmp_path):
     assert b"\x1b*\x01" in capture.read_bytes()
 
 
-@pytest.mark.parametrize(("pins", "x_dpi", "y_dpi", "shape"), [(9, 120, 72, (576, 960)), (24, 180, 180, (1440, 1440))])
+@pytest.mark.parametrize(
+    ("pins", "x_dpi", "y_dpi", "shape"),
+    [(9, 120, 72, (576, 960)), (24, 180, 180, (1440, 1440))],
+)
 def test_a_circle_prints_round(tmp_path, pins, x_dpi, y_dpi, shape):
     src = tmp_path / "in.png"
     capture = tmp_path / "job.prn"
@@ -784,18 +793,27 @@ def test_print_options_need_print(source, dither_calls, extra):
 
 @pytest.mark.parametrize("width", ["0", "nan", "inf"])
 def test_unusable_page_width_is_refused(source, tmp_path, dither_calls, width):
-    assert refused(["--print", str(tmp_path / "j.prn"), "--page-width", width, str(source)]) == 2
+    assert (
+        refused(
+            ["--print", str(tmp_path / "j.prn"), "--page-width", width, str(source)]
+        )
+        == 2
+    )
     assert dither_calls == []
 
 
 def test_unknown_pin_count_is_refused(source, tmp_path, dither_calls):
-    assert refused(["--print", str(tmp_path / "j.prn"), "--pins", "12", str(source)]) == 2
+    assert (
+        refused(["--print", str(tmp_path / "j.prn"), "--pins", "12", str(source)]) == 2
+    )
     assert dither_calls == []
 
 
 def test_file_output_keeps_its_default_dpi(source):
     h.main([str(source)])
-    assert Image.open(output_of(source)).info["dpi"] == pytest.approx((72, 72), abs=0.01)
+    assert Image.open(output_of(source)).info["dpi"] == pytest.approx(
+        (72, 72), abs=0.01
+    )
 
 
 def test_wedge_is_seventeen_even_gray_steps():

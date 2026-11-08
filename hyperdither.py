@@ -104,7 +104,7 @@ def escp_stream(dots: np.ndarray, pins: int) -> bytes:
         used = np.flatnonzero(columns.any(axis=1))
         if used.size:
             count = int(used[-1]) + 1
-            stream += bytes((0x1b, 0x2a, mode, count & 255, count >> 8))
+            stream += bytes((0x1B, 0x2A, mode, count & 255, count >> 8))
             stream += columns[:count].tobytes()
         stream += b"\r\n"
     stream += b"\x1b@"
@@ -140,8 +140,12 @@ def resolve_printing(
         if os.path.isfile(device) and not args.force:
             parser.error(f"{device} exists; pass -f to overwrite it")
         if not os.access(device, os.W_OK):
-            parser.error(f"cannot write to {device}; on Linux your user usually needs the lp group")
-    elif device.startswith("/dev/") or not os.path.isdir(os.path.dirname(device) or "."):
+            parser.error(
+                f"cannot write to {device}; on Linux your user usually needs the lp group"
+            )
+    elif device.startswith("/dev/") or not os.path.isdir(
+        os.path.dirname(device) or "."
+    ):
         parser.error(f"no such device: {device}")
     return device
 
@@ -348,7 +352,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.sharpness != ENHANCE_DEFAULT:
         img = ImageEnhance.Sharpness(img).enhance(args.sharpness)
     if args.gamma != 1:
-        img = img.point([round(255 * (v / 255) ** (1 / args.gamma)) for v in range(256)])
+        img = img.point(
+            [round(255 * (v / 255) ** (1 / args.gamma)) for v in range(256)]
+        )
 
     if args.bottom:
         m = np.array(img)[::-1, :]
