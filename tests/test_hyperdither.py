@@ -120,3 +120,23 @@ def test_error_on_the_left_edge_changes_only_nearby_columns():
     wide[0, 0] = 0
     without_left_error = run_kernel(wide)
     assert np.array_equal(with_left_error[:, 10:], without_left_error[:, 10:])
+
+
+def test_dark_flat_gray_keeps_its_highlights():
+    flat = np.full((200, 200), 32, np.uint8)
+    assert np.array_equal(run_kernel(flat), kernel_reference(flat))
+    assert (run_kernel(flat) == 255).any()
+
+
+def test_kernel_matches_an_independent_float_reference():
+    rng = np.random.default_rng(11)
+    array = rng.integers(0, 256, (48, 64), dtype=np.uint8)
+    assert np.array_equal(run_kernel(array), kernel_reference(array))
+
+
+def test_kernel_reference_is_sensitive_to_input():
+    rng = np.random.default_rng(11)
+    array = rng.integers(0, 256, (48, 64), dtype=np.uint8)
+    changed = array.copy()
+    changed[0, 0] ^= 0x80
+    assert not np.array_equal(kernel_reference(array), kernel_reference(changed))
