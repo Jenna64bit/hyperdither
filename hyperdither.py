@@ -44,7 +44,8 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
                 if x + 2 < num.shape[1]:
                     derr[y, x + 2] += float(errval) / float(div)
             if y + 1 < num.shape[0]:
-                derr[y + 1, x - 1] += float(errval) / float(div)
+                if x > 0:
+                    derr[y + 1, x - 1] += float(errval) / float(div)
                 derr[y + 1, x] += float(errval) / float(div)
                 if y + 2 < num.shape[0]:
                     derr[y + 2, x] += float(errval) / float(div)
