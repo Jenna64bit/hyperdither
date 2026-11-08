@@ -577,3 +577,92 @@ def test_gamma_one_changes_nothing(tmp_path):
 def test_unusable_gamma_is_refused_before_work(source, dither_calls, gamma):
     assert refused(["-g", gamma, str(source)]) == 2
     assert dither_calls == []
+
+
+ESCP_GEOMETRY = {9: (1, 1, 216, 72, 8), 24: (39, 3, 180, 180, 24)}
+
+
+def decode_escp(stream, pins, shape):
+    mode, bytes_per_column, unit, rows_per_inch, pass_height = ESCP_GEOMETRY[pins]
+    dots = np.zeros(shape, bool)
+    state = {"resets": 0, "unidirectional": False, "passes": 0, "spacing": None}
+    i = y = 0
+    while i < len(stream):
+        byte = stream[i]
+        if byte == 0x0D:
+            i += 1
+        elif byte == 0x0A:
+            advance = state["spacing"] * rows_per_inch / unit
+            assert advance == pass_height
+            y += pass_height
+            i += 1
+        elif byte == 0x1B and stream[i + 1] == ord("@"):
+            state["resets"] += 1
+            i += 2
+        elif byte == 0x1B and stream[i + 1] == ord("U"):
+            state["unidirectional"] = stream[i + 2] == 1
+            i += 3
+        elif byte == 0x1B and stream[i + 1] == ord("3"):
+            state["spacing"] = stream[i + 2]
+            i += 3
+        elif byte == 0x1B and stream[i + 1] == ord("*"):
+            assert stream[i + 2] == mode
+            columns = stream[i + 3] + 256 * stream[i + 4]
+            body = stream[i + 5 : i + 5 + columns * bytes_per_column]
+            assert len(body) == columns * bytes_per_column
+            for column in range(columns):
+                word = int.from_bytes(body[column * bytes_per_column : (column + 1) * bytes_per_column])
+                for pin in range(pass_height):
+                    if word >> (pass_height - 1 - pin) & 1:
+                        dots[y + pin, column] = True
+            state["passes"] += 1
+            i += 5 + columns * bytes_per_column
+        else:
+            raise AssertionError(f"unexpected byte {byte:#x} at offset {i}")
+    return dots, state
+
+
+@pytest.mark.parametrize("pins", [9, 24])
+@pytest.mark.parametrize("shape", [(23, 50), (48, 300), (1, 1), (24, 7)])
+def test_escp_round_trips_through_an_independent_decoder(pins, shape):
+    rng = np.random.default_rng(pins + shape[0])
+    dots = rng.random(shape) < 0.4
+    decoded, state = decode_escp(h.escp_stream(dots, pins), pins, shape)
+    assert np.array_equal(decoded, dots)
+    assert state["unidirectional"]
+
+
+def test_escp_exact_bytes_for_one_dot():
+    dots = np.zeros((8, 1), bool)
+    dots[0, 0] = True
+    assert h.escp_stream(dots, 9) == (
+        b"\x1b@\x1bU\x01\x1b3\x18\x1b*\x01\x01\x00\x80\r\n\x1b@"
+    )
+
+
+def test_escp_top_pin_is_the_high_bit_on_24_pins():
+    dots = np.zeros((24, 1), bool)
+    dots[23, 0] = True
+    assert b"\x1b*\x27\x01\x00\x00\x00\x01\r\n" in h.escp_stream(dots, 24)
+
+
+def test_escp_column_count_uses_both_bytes():
+    assert b"\x1b*\x01\x2c\x01" in h.escp_stream(np.ones((8, 300), bool), 9)
+
+
+def test_escp_blank_band_only_feeds_paper():
+    dots = np.zeros((24, 10), bool)
+    dots[16:, 0] = True
+    decoded, state = decode_escp(h.escp_stream(dots, 9), 9, dots.shape)
+    assert state["passes"] == 1
+    assert np.array_equal(decoded, dots)
+
+
+def test_escp_trims_blank_right_margin():
+    dots = np.zeros((8, 500), bool)
+    dots[0, 3] = True
+    assert b"\x1b*\x01\x04\x00" in h.escp_stream(dots, 9)
+
+
+def test_escp_resets_the_printer_when_done():
+    assert h.escp_stream(np.ones((8, 2), bool), 9).endswith(b"\x1b@")
