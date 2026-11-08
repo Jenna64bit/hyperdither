@@ -27,9 +27,9 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
     Returns:
         np.ndarray: The final dithered array, scaled back to the full 0-255 range and reversed along axis 0 (rows).
     """
-    derr = np.zeros(tuple(num.shape), dtype=np.int32) 
+    derr = np.zeros(tuple(num.shape), dtype=np.float64)
 
-    div = 8
+    div = 8.0
     for y in range(num.shape[0]):
         for x in range(num.shape[1]):
             newval = derr[y, x] + num[y, x]
@@ -40,17 +40,17 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
                 errval = newval
                 num[y, x] = 0.0
             if x + 1 < num.shape[1]:
-                derr[y, x + 1] += float(errval) / float(div)
+                derr[y, x + 1] += errval / div
                 if x + 2 < num.shape[1]:
-                    derr[y, x + 2] += float(errval) / float(div)
+                    derr[y, x + 2] += errval / div
             if y + 1 < num.shape[0]:
                 if x > 0:
-                    derr[y + 1, x - 1] += float(errval) / float(div)
-                derr[y + 1, x] += float(errval) / float(div)
+                    derr[y + 1, x - 1] += errval / div
+                derr[y + 1, x] += errval / div
                 if y + 2 < num.shape[0]:
-                    derr[y + 2, x] += float(errval) / float(div)
+                    derr[y + 2, x] += errval / div
                 if x + 1 < num.shape[1]:
-                    derr[y + 1, x + 1] += float(errval) / float(div)
+                    derr[y + 1, x + 1] += errval / div
     return num[::-1, :] * 255
 
 
