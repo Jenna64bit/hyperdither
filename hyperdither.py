@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> None:
     This function initializes argparse with all necessary options:
 
     Args:
-        argv (list[str], optional): Optional list of arguments (defaults to sys.argv).
+        argv (list[str], optional): Arguments without the program name (defaults to sys.argv[1:]).
 
     Returns:
         None: Executes the program logic and handles file output/exit.
@@ -77,9 +77,6 @@ def main(argv: list[str] | None = None) -> None:
         --resize (-r) (int): Resizes the image on its longest dimension before dithering.
         --double (-2) (bool): Doubles the output resolution using nearest neighbors.
     """
-    if argv is None:
-        argv = sys.argv
-
     parser = argparse.ArgumentParser(
         description="Dither image an image using Atkinson 'hyperdither'."
     )
@@ -157,7 +154,7 @@ def main(argv: list[str] | None = None) -> None:
         help="double post-dither image using nearest neighbors",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not os.path.isfile(args.filename):
         print("Must supply a valid file.")
