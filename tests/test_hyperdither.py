@@ -257,3 +257,87 @@ def test_literal_tilde_output_stays_out_of_a_directory_named_tilde(tmp_path, mon
     write_source(tmp_path / "in.png")
     h.main(["~/in.png"])
     assert not (tmp_path / "~").exists()
+
+
+@pytest.fixture
+def dither_calls(monkeypatch):
+    calls = []
+    real = h.dither
+
+    def spy(*args, **kwargs):
+        calls.append(args)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(h, "dither", spy)
+    return calls
+
+
+def refused(args):
+    with pytest.raises(SystemExit) as caught:
+        h.main(args)
+    return caught.value.code
+
+
+def test_spy_observes_a_normal_run(source, dither_calls):
+    h.main([str(source)])
+    assert len(dither_calls) == 1
+
+
+def test_output_flag_chooses_the_path(source, tmp_path):
+    chosen = tmp_path / "chosen.png"
+    h.main(["-o", str(chosen), str(source)])
+    assert chosen.is_file()
+    assert not output_of(source).exists()
+
+
+def test_output_flag_expands_a_tilde(source, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    h.main(["-o", "~/chosen.png", str(source)])
+    assert (tmp_path / "chosen.png").is_file()
+
+
+def test_output_extension_selects_the_format(source, tmp_path):
+    chosen = tmp_path / "chosen.bmp"
+    h.main(["-o", str(chosen), str(source)])
+    assert Image.open(chosen).format == "BMP"
+
+
+def test_existing_output_is_kept_and_no_work_is_done(source, dither_calls, capsys):
+    output_of(source).write_bytes(b"keep")
+    assert refused([str(source)]) == 2
+    assert output_of(source).read_bytes() == b"keep"
+    assert dither_calls == []
+    assert "exists" in capsys.readouterr().err
+
+
+def test_force_overwrites(source):
+    output_of(source).write_bytes(b"keep")
+    h.main(["-f", str(source)])
+    assert output_of(source).read_bytes() != b"keep"
+
+
+@pytest.mark.parametrize("ext", ["nope", "psd"])
+def test_unwritable_extension_is_refused_before_work(source, dither_calls, ext, capsys):
+    assert refused(["-e", ext, str(source)]) == 2
+    assert dither_calls == []
+    assert ext in capsys.readouterr().err
+
+
+def test_writable_extension_is_accepted(source):
+    h.main(["-e", "bmp", str(source)])
+    assert Image.open(source.with_name("in_out.bmp")).format == "BMP"
+
+
+def test_unwritable_output_path_is_refused_before_work(source, tmp_path, dither_calls):
+    assert refused(["-o", str(tmp_path / "chosen.nope"), str(source)]) == 2
+    assert dither_calls == []
+
+
+def test_missing_output_directory_is_refused_before_work(source, tmp_path, dither_calls):
+    assert refused(["-o", str(tmp_path / "no" / "chosen.png"), str(source)]) == 2
+    assert dither_calls == []
+
+
+@pytest.mark.parametrize("ext", ["png", "bmp"])
+def test_output_and_ext_conflict(source, tmp_path, ext):
+    assert refused(["-e", ext, "-o", str(tmp_path / "chosen.png"), str(source)]) == 2
