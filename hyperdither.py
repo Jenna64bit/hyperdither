@@ -173,18 +173,18 @@ def main(argv: list[str] | None = None) -> None:
     if args.bottom:
         m = np.array(img)[::-1, :]
         m2 = dither(m, thresh=args.threshold)
-        out = Image.fromarray((m2[:, :] * 0.9 + 0.5).astype(np.uint8))
+        out = Image.fromarray(m2[:, :].astype(np.uint8))
     else:
         m = np.array(img)[:, :]
         m2 = dither(m, thresh=args.threshold)
-        out = Image.fromarray((m2[::-1, :] * 0.9 + 0.5).astype(np.uint8))
+        out = Image.fromarray(m2[::-1, :].astype(np.uint8))
     basename, _ext = os.path.splitext(args.filename)
     outfn = basename + "_out." + args.ext
 
     if args.double:
         out = out.resize((out.width * 2, out.height * 2))
     if args.mono:
-        out.convert("1").save(outfn, dpi=(args.dpi,) * 2)
+        out.convert("1", dither=Image.Dither.NONE).save(outfn, dpi=(args.dpi,) * 2)
     else:
         out.save(outfn, dpi=(args.dpi,) * 2)
 
