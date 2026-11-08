@@ -214,3 +214,31 @@ def test_mono_flag_still_works_after_a_contrast_value(source):
 def test_mono_flag_alone_is_not_taken_for_a_value(source):
     h.main(["-1", str(source)])
     assert Image.open(output_of(source)).mode == "1"
+
+
+@pytest.mark.parametrize(
+    ("flag", "enhancer"),
+    [("-c", ImageEnhance.Contrast), ("-s", ImageEnhance.Sharpness)],
+)
+def test_zero_enhancement_is_applied(source, flag, enhancer):
+    h.main([flag, "0", str(source)])
+    assert np.array_equal(pixels(output_of(source)), enhanced_expectation(source, enhancer, 0.0))
+
+
+@pytest.mark.parametrize("flag", ["-c", "-s"])
+def test_factor_one_equals_no_flag(tmp_path, flag):
+    plain = tmp_path / "plain.png"
+    explicit = tmp_path / "explicit.png"
+    write_source(plain)
+    write_source(explicit)
+    h.main([str(plain)])
+    h.main([flag, "1", str(explicit)])
+    assert np.array_equal(pixels(output_of(plain)), pixels(output_of(explicit)))
+
+
+def test_help_states_the_real_default(capsys):
+    with pytest.raises(SystemExit):
+        h.main(["--help"])
+    text = capsys.readouterr().out
+    assert h.ENHANCE_DEFAULT == 1.0
+    assert text.count("(default 1)") == 2
