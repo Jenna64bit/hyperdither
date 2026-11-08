@@ -70,6 +70,23 @@ def attach_negative_values(argv: list[str]) -> list[str]:
     return joined
 
 
+def resolve_output(args: argparse.Namespace, filename: str, parser: argparse.ArgumentParser) -> str:
+    """Choose the output path and refuse an unusable one before any image work."""
+    if args.output:
+        outfn = os.path.expanduser(args.output)
+    else:
+        outfn = os.path.splitext(filename)[0] + "_out." + (args.ext or "png")
+    Image.init()
+    ext = os.path.splitext(outfn)[1].lower()
+    if Image.EXTENSION.get(ext) not in Image.SAVE:
+        parser.error(f"cannot write files with extension '{ext}'")
+    if not os.path.isdir(os.path.dirname(outfn) or "."):
+        parser.error(f"output directory does not exist: {outfn}")
+    if os.path.exists(outfn) and not args.force:
+        parser.error(f"{outfn} exists; pass -f to overwrite it")
+    return outfn
+
+
 def main(argv: list[str] | None = None) -> None:
     """
     Main function to parse command-line arguments and orchestrate the dithering process.
@@ -88,6 +105,8 @@ def main(argv: list[str] | None = None) -> None:
         --threshold (-t) (int): The intensity threshold for dithering (default 127).
         --dpi (-d) (int): DPI setting for output files (default 72).
         --ext (-e) (str): Output file extension type (default png).
+        --output (-o) (str): Output path, instead of <input>_out.<ext>.
+        --force (-f) (bool): Overwrite the output file if it exists.
         --bottom (-b) (bool): Processes the image starting from the bottom left.
         --contrast (-c) (float): Contrast boost factor (1 is no change, negative for inversion).
         --sharpness (-s) (float): Sharpness boost factor (1 is no change).
@@ -124,8 +143,30 @@ def main(argv: list[str] | None = None) -> None:
         default=72,
         help="dpi out output file",
     )
+    target = parser.add_mutually_exclusive_group()
+    target.add_argument(
+        "-e",
+        "--ext",
+        dest="ext",
+        action="store",
+        default=None,
+        help="output filetype (default png)",
+    )
+    target.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        action="store",
+        default=None,
+        help="output path (default <input>_out.<ext>)",
+    )
     parser.add_argument(
-        "-e", "--ext", dest="ext", action="store", default="png", help="output filetype"
+        "-f",
+        "--force",
+        dest="force",
+        action="store_true",
+        default=False,
+        help="overwrite the output file if it exists",
     )
     parser.add_argument(
         "-b",
@@ -179,6 +220,7 @@ def main(argv: list[str] | None = None) -> None:
     if not os.path.isfile(filename):
         print("Must supply a valid file.")
         sys.exit(1)
+    outfn = resolve_output(args, filename, parser)
     img = Image.open(filename).convert("L")
     if args.contrast != ENHANCE_DEFAULT:
         # img = ImageEnhance.Contrast(img).enhance(1 + args.contrast/100)
@@ -197,9 +239,6 @@ def main(argv: list[str] | None = None) -> None:
         m = np.array(img)[:, :]
         m2 = dither(m, thresh=args.threshold)
         out = Image.fromarray(m2[::-1, :].astype(np.uint8))
-    basename, _ext = os.path.splitext(filename)
-    outfn = basename + "_out." + args.ext
-
     if args.double:
         out = out.resize((out.width * 2, out.height * 2), Image.Resampling.NEAREST)
     if args.mono:
