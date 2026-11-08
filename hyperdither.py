@@ -111,6 +111,49 @@ def escp_stream(dots: np.ndarray, pins: int) -> bytes:
     return bytes(stream)
 
 
+def resolve_printing(
+    args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> str | None:
+    """Return the print target, or None for file output, refusing an unusable one before any work."""
+    if args.print_to is None:
+        if args.pins is not None or args.page_width is not None:
+            parser.error("--pins and --page-width need --print")
+        return None
+    file_only = {
+        "-o": args.output,
+        "-e": args.ext,
+        "-2": args.double,
+        "-r": args.resize,
+        "-d": args.dpi,
+    }
+    conflicts = [flag for flag, value in file_only.items() if value]
+    if conflicts:
+        parser.error(f"--print cannot be combined with {' '.join(conflicts)}")
+    args.pins = args.pins or 9
+    args.page_width = 8.0 if args.page_width is None else args.page_width
+    if not (math.isfinite(args.page_width) and args.page_width > 0):
+        parser.error("--page-width must be a positive number of inches")
+    if args.print_to == "-":
+        return "-"
+    device = os.path.expanduser(args.print_to)
+    if os.path.exists(device):
+        if os.path.isfile(device) and not args.force:
+            parser.error(f"{device} exists; pass -f to overwrite it")
+        if not os.access(device, os.W_OK):
+            parser.error(f"cannot write to {device}; on Linux your user usually needs the lp group")
+    elif device.startswith("/dev/") or not os.path.isdir(os.path.dirname(device) or "."):
+        parser.error(f"no such device: {device}")
+    return device
+
+
+def fit_to_page(img: Image.Image, pins: int, inches: float) -> Image.Image:
+    """Resize to the page in printer dots, so non-square dots still print the right shape."""
+    _, _, x_dpi, y_dpi = ESCP_MODES[pins]
+    columns = round(inches * x_dpi)
+    rows = max(1, round(columns * img.height / img.width * y_dpi / x_dpi))
+    return img.resize((columns, rows), Image.Resampling.LANCZOS)
+
+
 def load_gray(filename: str) -> Image.Image:
     """Open an image upright, with transparency on white paper and 16-bit data scaled to 8."""
     img = ImageOps.exif_transpose(Image.open(filename))
@@ -175,8 +218,31 @@ def main(argv: list[str] | None = None) -> None:
         dest="dpi",
         type=int,
         action="store",
-        default=72,
-        help="dpi out output file",
+        default=None,
+        help="dpi of output file (default 72)",
+    )
+    parser.add_argument(
+        "--print",
+        dest="print_to",
+        metavar="DEVICE",
+        default=None,
+        help="send Epson ESC/P graphics to DEVICE, or - for stdout, instead of writing an image",
+    )
+    parser.add_argument(
+        "--pins",
+        dest="pins",
+        type=int,
+        choices=sorted(ESCP_MODES),
+        default=None,
+        help="print head pins, with --print (default 9)",
+    )
+    parser.add_argument(
+        "--page-width",
+        dest="page_width",
+        type=float,
+        metavar="INCHES",
+        default=None,
+        help="printed width in inches, with --print (default 8)",
     )
     target = parser.add_mutually_exclusive_group()
     target.add_argument(
@@ -266,10 +332,13 @@ def main(argv: list[str] | None = None) -> None:
     if not os.path.isfile(filename):
         print("Must supply a valid file.")
         sys.exit(1)
-    outfn = resolve_output(args, filename, parser)
+    device = resolve_printing(args, parser)
+    outfn = None if device else resolve_output(args, filename, parser)
     img = load_gray(filename)
     if args.contrast != ENHANCE_DEFAULT:
         img = ImageEnhance.Contrast(img).enhance(args.contrast)
+    if device:
+        img = fit_to_page(img, args.pins, args.page_width)
     if args.resize:
         img.thumbnail((args.resize,) * 2, Image.Resampling.BICUBIC)
     if args.sharpness != ENHANCE_DEFAULT:
@@ -285,12 +354,22 @@ def main(argv: list[str] | None = None) -> None:
         m = np.array(img)[:, :]
         m2 = dither(m, thresh=args.threshold)
         out = Image.fromarray(m2[::-1, :].astype(np.uint8))
+    if device:
+        stream = escp_stream(np.array(out) == 0, args.pins)
+        if device == "-":
+            sys.stdout.buffer.write(stream)
+            sys.stdout.buffer.flush()
+        else:
+            with open(device, "wb") as printer:
+                printer.write(stream)
+        return
     if args.double:
         out = out.resize((out.width * 2, out.height * 2), Image.Resampling.NEAREST)
+    dpi = (args.dpi or 72,) * 2
     if args.mono:
-        out.convert("1", dither=Image.Dither.NONE).save(outfn, dpi=(args.dpi,) * 2)
+        out.convert("1", dither=Image.Dither.NONE).save(outfn, dpi=dpi)
     else:
-        out.save(outfn, dpi=(args.dpi,) * 2)
+        out.save(outfn, dpi=dpi)
 
 
 if __name__ == "__main__":

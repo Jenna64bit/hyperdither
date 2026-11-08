@@ -674,13 +674,17 @@ def disc_source(path, size=400, radius=150):
     Image.fromarray(array.astype(np.uint8)).save(path)
 
 
-@pytest.mark.parametrize(("pins", "size"), [(9, (960, 576)), (24, (1440, 1440))])
-def test_print_sends_the_dithered_dots_one_for_one(tmp_path, pins, size):
+@pytest.mark.parametrize(
+    ("pins", "size", "fitted"),
+    [(9, (1000, 600), (960, 346)), (24, (1440, 1440), (1440, 1440))],
+)
+def test_print_sends_the_dithered_page_one_for_one(tmp_path, pins, size, fitted):
     src = tmp_path / "in.png"
     capture = tmp_path / "job.prn"
     write_source(src, size=size)
     h.main(["--print", str(capture), "--pins", str(pins), str(src)])
-    expected = run_kernel(pixels(src)) == 0
+    page = np.array(Image.open(src).convert("L").resize(fitted, Image.Resampling.LANCZOS))
+    expected = run_kernel(page) == 0
     decoded, state = decode_escp(capture.read_bytes(), pins, expected.shape)
     assert np.array_equal(decoded, expected)
     assert state["unidirectional"]
