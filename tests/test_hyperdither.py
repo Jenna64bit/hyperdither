@@ -495,3 +495,48 @@ def test_committed_samples_match_their_documented_commands(
     produced = tmp_path / sample
     h.main([*args, "-o", str(produced), str(ROOT / "images" / "cat.jpg")])
     assert np.array_equal(pixels(produced), pixels(ROOT / "images" / sample))
+
+
+def test_exif_orientation_is_applied(tmp_path):
+    src = tmp_path / "in.jpg"
+    array = np.zeros((20, 40), np.uint8)
+    array[:, 20:] = 255
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    Image.fromarray(array).save(src, exif=exif, quality=95)
+    h.main([str(src)])
+    assert Image.open(output_of(src)).size == (20, 40)
+    result = pixels(output_of(src))
+    assert result[:20].mean() < result[20:].mean()
+
+
+@pytest.mark.parametrize("mode", ["RGBA", "LA", "PA"])
+def test_transparent_pixels_stay_white(tmp_path, mode):
+    src = tmp_path / "in.png"
+    array = np.zeros((32, 32, 4), np.uint8)
+    array[8:24, 8:24] = (0, 0, 0, 255)
+    Image.fromarray(array).convert(mode).save(src)
+    h.main([str(src)])
+    result = pixels(output_of(src))
+    assert result[:4].min() == 255
+    assert result[12:20, 12:20].max() == 0
+
+
+def test_palette_transparency_stays_white(tmp_path):
+    src = tmp_path / "in.png"
+    array = np.zeros((16, 16), np.uint8)
+    image = Image.fromarray(array, "L").convert("P")
+    image.save(src, transparency=int(np.array(image)[0, 0]))
+    h.main([str(src)])
+    assert pixels(output_of(src)).min() == 255
+
+
+def test_sixteen_bit_gray_keeps_its_range(tmp_path):
+    src = tmp_path / "in.png"
+    ramp = np.tile(np.linspace(0, 65535, 256).astype(np.uint16), (64, 1))
+    Image.fromarray(ramp).save(src)
+    assert Image.open(src).mode.startswith("I")
+    h.main([str(src)])
+    result = pixels(output_of(src))
+    assert abs((result > 0).mean() - 0.5) < 0.06
+    assert result[:, :64].mean() < result[:, -64:].mean()
