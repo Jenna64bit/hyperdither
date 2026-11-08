@@ -79,3 +79,44 @@ def test_main_without_argv_reads_the_command_line(source, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["prog", str(source)])
     h.main()
     assert output_of(source).is_file()
+
+
+def kernel_reference(array, threshold=127):
+    values = array.astype(float)
+    height, width = values.shape
+    carried = np.zeros(values.shape)
+    result = np.zeros(values.shape, np.uint8)
+    for y in range(height):
+        for x in range(width):
+            value = carried[y, x] + values[y, x]
+            if value >= threshold:
+                error = value - 255
+                result[y, x] = 255
+            else:
+                error = value
+            for dy, dx in ((0, 1), (0, 2), (1, -1), (1, 0), (1, 1), (2, 0)):
+                ny, nx = y + dy, x + dx
+                if 0 <= nx < width and ny < height:
+                    carried[ny, nx] += error / 8
+    return result
+
+
+def run_kernel(array):
+    return h.dither(array.copy())[::-1, :]
+
+
+def test_left_edge_error_does_not_reach_the_right_edge():
+    array = np.zeros((2, 4), np.uint8)
+    array[0, 0] = 100
+    array[1, 3] = 120
+    assert run_kernel(array)[1, 3] == 0
+
+
+def test_error_on_the_left_edge_changes_only_nearby_columns():
+    wide = np.zeros((3, 40), np.uint8)
+    wide[0, 0] = 126
+    wide[1, 39] = 126
+    with_left_error = run_kernel(wide)
+    wide[0, 0] = 0
+    without_left_error = run_kernel(wide)
+    assert np.array_equal(with_left_error[:, 10:], without_left_error[:, 10:])
