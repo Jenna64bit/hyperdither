@@ -10,6 +10,8 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 
 ENHANCE_DEFAULT = 1.0
+# pins: ESC * mode, dots per pass, horizontal dpi, vertical dpi
+ESCP_MODES = {9: (1, 8, 120, 72), 24: (39, 24, 180, 180)}
 VALUE_OPTIONS = {"-c", "--contrast", "-s", "--sharpness"}
 NEGATIVE_NUMBER = re.compile(r"-(\d+\.?\d*|\.\d+)")
 
@@ -88,6 +90,25 @@ def resolve_output(
     if os.path.exists(outfn) and not args.force:
         parser.error(f"{outfn} exists; pass -f to overwrite it")
     return outfn
+
+
+def escp_stream(dots: np.ndarray, pins: int) -> bytes:
+    """Encode a boolean array, True where a dot fires, as unidirectional ESC/P bit-image passes."""
+    mode, pass_height, _, _ = ESCP_MODES[pins]
+    stream = bytearray(b"\x1b@\x1bU\x01\x1b3\x18")
+    for top in range(0, dots.shape[0], pass_height):
+        band = np.zeros((pass_height, dots.shape[1]), bool)
+        rows = dots[top : top + pass_height]
+        band[: rows.shape[0]] = rows
+        columns = np.packbits(band, axis=0).T
+        used = np.flatnonzero(columns.any(axis=1))
+        if used.size:
+            count = int(used[-1]) + 1
+            stream += bytes((0x1b, 0x2a, mode, count & 255, count >> 8))
+            stream += columns[:count].tobytes()
+        stream += b"\r\n"
+    stream += b"\x1b@"
+    return bytes(stream)
 
 
 def load_gray(filename: str) -> Image.Image:
