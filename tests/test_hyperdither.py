@@ -796,3 +796,48 @@ def test_unknown_pin_count_is_refused(source, tmp_path, dither_calls):
 def test_file_output_keeps_its_default_dpi(source):
     h.main([str(source)])
     assert Image.open(output_of(source)).info["dpi"] == pytest.approx((72, 72), abs=0.01)
+
+
+def test_wedge_is_seventeen_even_gray_steps():
+    wedge = pixels(ROOT / "images" / "wedge.png")
+    assert (wedge == wedge[0]).all()
+    values, counts = np.unique(wedge[0], return_counts=True)
+    assert len(values) == 17
+    assert (values[0], values[-1]) == (0, 255)
+    assert np.ptp(np.diff(values.astype(int))) <= 1
+    assert len(set(counts)) == 1
+    assert (np.diff(wedge[0].astype(int)) >= 0).all()
+
+
+def test_wedge_prints_and_keeps_its_range(tmp_path):
+    capture = tmp_path / "job.prn"
+    h.main(["--print", str(capture), str(ROOT / "images" / "wedge.png")])
+    rows = round(960 * 150 / 1020 * 72 / 120)
+    dots, _ = decode_escp(capture.read_bytes(), 9, (rows, 960))
+    ink = dots.mean(axis=0)
+    assert ink[:40].mean() > 0.95
+    assert ink[-40:].mean() < 0.05
+
+
+@pytest.mark.parametrize(
+    "needle",
+    [
+        "--print /dev/usb/lp0",
+        "--print - | lp",
+        "-o raw",
+        "usermod -aG lp",
+        "--pins 24",
+        "--page-width",
+        "images/wedge.png",
+    ],
+)
+def test_readme_gives_the_linux_print_recipe(needle):
+    assert needle in readme_text()
+
+
+def test_every_recipe_option_exists(capsys):
+    with pytest.raises(SystemExit):
+        h.main(["--help"])
+    text = capsys.readouterr().out
+    for option in ("--print", "--pins", "--page-width", "--gamma"):
+        assert option in text
