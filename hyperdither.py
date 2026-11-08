@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> None:
     outfn = basename + "_out." + args.ext
 
     if args.double:
-        out = out.resize((out.width * 2, out.height * 2))
+        out = out.resize((out.width * 2, out.height * 2), Image.Resampling.NEAREST)
     if args.mono:
         out.convert("1", dither=Image.Dither.NONE).save(outfn, dpi=(args.dpi,) * 2)
     else:
