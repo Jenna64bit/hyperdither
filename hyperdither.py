@@ -18,7 +18,7 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
     """
     Applies Atkinson's style dithering process to a given intensity image represented as a NumPy array.
 
-    The function simulates an error diffusion filter across multiple passes (using neighbor information) 
+    The function runs an error diffusion filter in a single pass (using neighbor information)
     to spread quantization errors, resulting in a more visually pleasing dithered output when 
     converting continuous tones to black and white (1-bit).
 
@@ -223,12 +223,10 @@ def main(argv: list[str] | None = None) -> None:
     outfn = resolve_output(args, filename, parser)
     img = Image.open(filename).convert("L")
     if args.contrast != ENHANCE_DEFAULT:
-        # img = ImageEnhance.Contrast(img).enhance(1 + args.contrast/100)
         img = ImageEnhance.Contrast(img).enhance(args.contrast)
     if args.resize:
-        img.thumbnail((args.resize,) * 2, 3)
+        img.thumbnail((args.resize,) * 2, Image.Resampling.BICUBIC)
     if args.sharpness != ENHANCE_DEFAULT:
-        # img = ImageEnhance.Sharpness(img).enhance(1 + args.sharpness/100)
         img = ImageEnhance.Sharpness(img).enhance(args.sharpness)
 
     if args.bottom:
