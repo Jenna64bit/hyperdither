@@ -175,10 +175,11 @@ def main(argv: list[str] | None = None) -> None:
         attach_negative_values(sys.argv[1:] if argv is None else argv)
     )
 
-    if not os.path.isfile(args.filename):
+    filename = os.path.expanduser(args.filename)
+    if not os.path.isfile(filename):
         print("Must supply a valid file.")
         sys.exit(1)
-    img = Image.open(os.path.expanduser(args.filename)).convert("L")
+    img = Image.open(filename).convert("L")
     if args.contrast != ENHANCE_DEFAULT:
         # img = ImageEnhance.Contrast(img).enhance(1 + args.contrast/100)
         img = ImageEnhance.Contrast(img).enhance(args.contrast)
@@ -196,7 +197,7 @@ def main(argv: list[str] | None = None) -> None:
         m = np.array(img)[:, :]
         m2 = dither(m, thresh=args.threshold)
         out = Image.fromarray(m2[::-1, :].astype(np.uint8))
-    basename, _ext = os.path.splitext(args.filename)
+    basename, _ext = os.path.splitext(filename)
     outfn = basename + "_out." + args.ext
 
     if args.double:
