@@ -43,6 +43,27 @@ For contrast and sharpness, 1 is default and does not need to be specified.  Num
 
 I found values of 0.8 to 1.2 are good for contrast if you want lighten or darken specific areas.
 
+## Printing on a dot-matrix printer
+
+`--print` sends the image straight to an Epson-compatible (ESC/P) printer, one dot per dot, instead of writing a file.  It prints in one direction so graphics stay aligned.  The default is a 9-pin printer at 120x72 dpi.  Use `--pins 24` for a 24-pin printer at 180x180 dpi.  `--page-width` sets the printed width in inches, 8 by default.
+
+On Linux, with the printer on a parallel port or USB adapter:
+
+    sudo usermod -aG lp "$USER"
+    uv run hyperdither.py photo.jpg --print /dev/usb/lp0
+
+Log in again after the first command.  A parallel port is usually `/dev/lp0`.  Through a raw CUPS queue:
+
+    uv run hyperdither.py photo.jpg --print - | lp -d QUEUE -o raw
+
+Do not print a dithered PNG through a normal printer driver.  A driver rescales it, and rescaling destroys the dither.
+
+Every printer and ribbon renders grays differently, so print the test wedge once:
+
+    uv run hyperdither.py images/wedge.png --print /dev/usb/lp0
+
+The 17 steps should get evenly lighter from left to right.  If the middle looks too dark, raise `-g`, for example `-g 1.4`.  If it looks too light, lower it.  Use the same `-g` value for your photos.
+
 ## Requirements
 
 - [pillow][] 

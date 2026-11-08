@@ -188,6 +188,10 @@ def main(argv: list[str] | None = None) -> None:
         --bottom (-b) (bool): Processes the image starting from the bottom left.
         --contrast (-c) (float): Contrast boost factor (1 is no change, negative for inversion).
         --sharpness (-s) (float): Sharpness boost factor (1 is no change).
+        --print (str): Send ESC/P graphics to a device, or - for stdout, instead of writing an image.
+        --pins (int): Print head pins with --print, 9 or 24 (default 9).
+        --page-width (float): Printed width in inches with --print (default 8).
+        --gamma (-g) (float): Tone curve before dithering; above 1 lightens (default 1).
         --resize (-r) (int): Resizes the image on its longest dimension before dithering.
         --double (-2) (bool): Doubles the output resolution using nearest neighbors.
     """
