@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 import argparse
 import os
+import re
 import sys
 
 import numba
 import numpy as np
 from PIL import Image, ImageEnhance
+
+VALUE_OPTIONS = {"-c", "--contrast", "-s", "--sharpness"}
+NEGATIVE_NUMBER = re.compile(r"-(\d+\.?\d*|\.\d+)")
 
 
 @numba.jit
@@ -52,6 +56,17 @@ def dither(num: np.ndarray, thresh: int = 127) -> np.ndarray:
                 if x + 1 < num.shape[1]:
                     derr[y + 1, x + 1] += errval / div
     return num[::-1, :] * 255
+
+
+def attach_negative_values(argv: list[str]) -> list[str]:
+    """Join `-c -1` into `-c=-1`, because the -1 flag makes argparse read negative numbers as options."""
+    joined: list[str] = []
+    for token in argv:
+        if joined and joined[-1] in VALUE_OPTIONS and NEGATIVE_NUMBER.fullmatch(token):
+            joined[-1] = f"{joined[-1]}={token}"
+        else:
+            joined.append(token)
+    return joined
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -155,7 +170,9 @@ def main(argv: list[str] | None = None) -> None:
         help="double post-dither image using nearest neighbors",
     )
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(
+        attach_negative_values(sys.argv[1:] if argv is None else argv)
+    )
 
     if not os.path.isfile(args.filename):
         print("Must supply a valid file.")
