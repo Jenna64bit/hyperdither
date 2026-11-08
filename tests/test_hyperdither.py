@@ -254,7 +254,7 @@ def test_help_states_the_real_default(capsys):
         h.main(["--help"])
     text = " ".join(capsys.readouterr().out.split())
     assert h.ENHANCE_DEFAULT == 1.0
-    assert text.count("(default 1)") == 2
+    assert text.count("(default 1)") == 3
 
 
 def test_literal_tilde_input_is_expanded(tmp_path, monkeypatch):

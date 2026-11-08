@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import math
 import os
 import re
 import sys
@@ -208,6 +209,15 @@ def main(argv: list[str] | None = None) -> None:
         help="boost sharpness by specified factor (default 1)",
     )
     parser.add_argument(
+        "-g",
+        "--gamma",
+        dest="gamma",
+        action="store",
+        default=1.0,
+        type=float,
+        help="tone curve applied before dithering; above 1 lightens (default 1)",
+    )
+    parser.add_argument(
         "-r",
         "--resize",
         dest="resize",
@@ -229,6 +239,8 @@ def main(argv: list[str] | None = None) -> None:
         attach_negative_values(sys.argv[1:] if argv is None else argv)
     )
 
+    if not (math.isfinite(args.gamma) and args.gamma > 0):
+        parser.error("gamma must be a positive number")
     filename = os.path.expanduser(args.filename)
     if not os.path.isfile(filename):
         print("Must supply a valid file.")
@@ -241,6 +253,8 @@ def main(argv: list[str] | None = None) -> None:
         img.thumbnail((args.resize,) * 2, Image.Resampling.BICUBIC)
     if args.sharpness != ENHANCE_DEFAULT:
         img = ImageEnhance.Sharpness(img).enhance(args.sharpness)
+    if args.gamma != 1:
+        img = img.point([round(255 * (v / 255) ** (1 / args.gamma)) for v in range(256)])
 
     if args.bottom:
         m = np.array(img)[::-1, :]

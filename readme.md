@@ -35,6 +35,7 @@ Reduced contrast:
 - `-b`: start at bottom left instead of top left with the dithering.
 - `-c`: boost contrast by specified amount (in terms of [pillow's][pillow] [ImageEnhancers][enhance] factor: 1 is no change).
 - `-s`: boost sharpness by specified amount (in terms of [pillow's][pillow] [ImageEnhancers][enhance] factor: 1 is no change).
+- `-g`: tone curve applied before dithering.  Numbers above 1 lighten the midtones, which helps printers that print dark.  Default is 1.
 - `-r`: resize pre-dither image on longest dimension.  Makes the image smaller only, pre-dithering.
 - `-2`: double post-dither image using nearest neighbors.  Makes output image twice as large as the pre-dither image.  If image is scaled from the resized pre-dither image if the `-r` option was specified.
 
